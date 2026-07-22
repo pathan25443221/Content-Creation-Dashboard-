@@ -177,15 +177,46 @@ def approve_clip(clip_id: int, req: ApproveRequest):
 
 @app.post("/api/clips/{clip_id}/reject")
 def reject_clip(clip_id: int):
-    """Rejects a clip from the review queue."""
+    """Rejects a clip from the review queue and deletes its rendered media files from disk."""
     with Session(engine) as session:
         clip = session.get(Clip, clip_id)
         if not clip:
             raise HTTPException(status_code=404, detail="Clip not found.")
+        
+        # Delete rendered MP4 & SRT from generator/output
+        if clip.file_path and os.path.exists(clip.file_path):
+            try:
+                os.remove(clip.file_path)
+                print(f"[Cleanup] Deleted rejected clip file: {clip.file_path}")
+            except Exception as e:
+                print(f"[Warning] Failed to delete clip file {clip.file_path}: {e}", file=sys.stderr)
+
+            srt_path = clip.file_path.replace(".mp4", ".srt")
+            if os.path.exists(srt_path):
+                try:
+                    os.remove(srt_path)
+                    print(f"[Cleanup] Deleted subtitle file: {srt_path}")
+                except Exception as e:
+                    print(f"[Warning] Failed to delete subtitle file {srt_path}: {e}", file=sys.stderr)
+
         clip.status = "rejected"
         session.add(clip)
         session.commit()
-    return {"message": f"Clip {clip_id} rejected."}
+
+        # Check if all clips for this video are no longer pending -> cleanup raw video file
+        video = session.get(Video, clip.video_id)
+        if video and video.local_path:
+            pending_count = session.exec(
+                select(func.count(Clip.id)).where(Clip.video_id == video.id, Clip.status == "pending")
+            ).one()
+            if pending_count == 0 and os.path.exists(video.local_path):
+                try:
+                    os.remove(video.local_path)
+                    print(f"[Cleanup] Deleted raw source video file: {video.local_path}")
+                except Exception as e:
+                    print(f"[Warning] Failed to delete raw video file {video.local_path}: {e}", file=sys.stderr)
+
+    return {"message": f"Clip {clip_id} rejected and files cleaned from disk."}
 
 @app.get("/api/posts")
 def list_posts():

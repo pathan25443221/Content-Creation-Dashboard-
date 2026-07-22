@@ -5,27 +5,22 @@ import argparse
 import re
 import ollama
 
-SYSTEM_PROMPT = """You are an expert short-form video editor selecting engaging clips for YouTube Shorts and Instagram Reels.
-You will be provided with a timestamped transcript of a video.
+SYSTEM_PROMPT = """You are an elite short-form content producer (YouTube Shorts & Instagram Reels).
+You are analyzing a timestamped transcript along with the video's actual tags, title, and topic metadata.
 
-Your task is to identify 2 to 4 high-value candidate clip segments.
-Each clip MUST be between 15 seconds and 60 seconds long.
-Look for:
-- Strong opening hooks or compelling questions
-- Self-contained points, tutorials, or stories
-- Key takeaways or punchlines
+Selection Criteria:
+1. DYNAMIC GENRE ADAPTATION: Adapt your selection strategy based on the video's tags and topic.
+   - For Podcasts/Interviews: Look for controversial opinions, deep revelations, or passionate debates.
+   - For Gaming/Action: Look for intense climax moments, funny fails, or high-excitement audio spikes.
+   - For Tech/Tutorials/Educational: Look for quick hacks, mind-blowing facts, or actionable tips.
+   - For Comedy/Vlogs/General: Look for funny punchlines, unexpected story twists, or high-relatability moments.
+2. VIRAL HOOK MANDATE (First 3 Seconds): Every clip MUST begin with an immediate curiosity-gap hook, bold statement, or intriguing question.
+3. COMPLETE THOUGHT BOUNDARY: Do NOT cut mid-sentence. Ensure `start` aligns with the first word of the hook sentence, and `end` aligns with the final period/punctuation of the concluding sentence.
+4. DURATION: Each clip MUST be between 15 seconds and 60 seconds long.
 
-Return ONLY a valid JSON array of objects with the exact keys: "start", "end", "reason", "title".
-Example response format:
-[
-  {
-    "start": 12.5,
-    "end": 45.0,
-    "reason": "Clear explanation of core concept with a strong opening hook.",
-    "title": "Mastering the Core Concept in 30 Seconds"
-  }
-]
-Do not include any conversational intro or markdown explanations outside the raw JSON array.
+Output Requirement:
+Return ONLY a raw JSON array of 2 to 4 objects with exact keys: "start", "end", "reason", "title".
+In "reason", explicitly state why the opening 3-second hook will capture viewer attention based on the video's tags.
 """
 
 def heuristic_clip_selection(transcript_data: dict, count: int = 3) -> list:
@@ -69,9 +64,9 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3) -> list:
             })
     return clips
 
-def select_clips(transcript_json_path: str, model_name: str = "llama3.1:8b") -> list:
+def select_clips(transcript_json_path: str, model_name: str = "llama3.1:8b", metadata: dict = None) -> list:
     """
-    Reads transcript JSON, prompts Ollama for candidate clip timestamps, and returns candidate clips.
+    Reads transcript JSON, prompts Ollama for candidate clip timestamps with video tags context.
     """
     if not os.path.exists(transcript_json_path):
         raise FileNotFoundError(f"Transcript JSON not found: {transcript_json_path}")
@@ -83,7 +78,13 @@ def select_clips(transcript_json_path: str, model_name: str = "llama3.1:8b") -> 
         [f"[{seg['start']}s - {seg['end']}s] {seg['text']}" for seg in data.get("segments", [])]
     )
 
-    prompt = f"Video Title/Path: {data.get('video_path')}\nTotal Duration: {data.get('duration')}s\n\nTranscript Segments:\n{segments_text}"
+    meta_str = ""
+    if metadata:
+        tags_str = ", ".join(metadata.get("tags", [])) or "General"
+        cats_str = ", ".join(metadata.get("categories", [])) or "General"
+        meta_str = f"Video Title: {metadata.get('title', 'Unknown')}\nCategories: {cats_str}\nVideo Tags/Keywords: {tags_str}\n\n"
+
+    prompt = f"{meta_str}Total Duration: {data.get('duration')}s\n\nTranscript Segments:\n{segments_text}"
 
     print(f"[SelectClips] Prompting Ollama model ('{model_name}')...")
     try:

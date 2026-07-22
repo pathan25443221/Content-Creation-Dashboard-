@@ -27,19 +27,28 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
     print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type})")
     
     # 1. Download or locate video file
+    raw_video_path = None
+    sub_path = None
+    metadata = {}
+    
     if video_input.startswith("http://") or video_input.startswith("https://"):
-        raw_video_path = download_video(video_input)
+        dl_res = download_video(video_input)
+        raw_video_path = dl_res["video_path"]
+        sub_path = dl_res.get("sub_path")
+        metadata = dl_res.get("metadata", {})
     else:
         raw_video_path = os.path.abspath(video_input)
+        metadata = {"title": os.path.basename(raw_video_path), "tags": [], "categories": []}
 
     if not os.path.exists(raw_video_path):
         raise FileNotFoundError(f"Raw video path does not exist: {raw_video_path}")
 
     # 2. Select candidates based on path
+    transcript_json = None
     if video_type == "speech":
         print("[Router] Path: Speech-based content")
-        transcript_json = transcribe_audio(raw_video_path, model_size="tiny")
-        candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model)
+        transcript_json = transcribe_audio(raw_video_path, model_size="tiny", sub_path=sub_path)
+        candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model, metadata=metadata)
     elif video_type == "visual":
         print("[Router] Path: Visual-based content")
         from generator.visual_based.select_clips import select_visual_clips
@@ -52,12 +61,13 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
     rendered_clips = render_clips_from_list(raw_video_path, candidate_clips, transcript_json_path=transcript_json)
 
     # 4. Save to Database
+    video_title = metadata.get("title") or os.path.basename(raw_video_path)
     with Session(engine) as session:
         video_entry = Video(
             source_url=video_input,
             video_type=video_type,
             local_path=raw_video_path,
-            title=os.path.basename(raw_video_path)
+            title=video_title
         )
         session.add(video_entry)
         session.commit()

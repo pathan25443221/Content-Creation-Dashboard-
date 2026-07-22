@@ -51,6 +51,9 @@ The **Content Creation Dashboard** is an autonomous, single-operator short-form 
 - [x] Prevent mid-sentence video cuts via sentence-aligned timestamp boundaries.
 - [x] Burn centered subtitles directly onto rendered 9:16 vertical video clips via `ffmpeg`.
 - [x] Add embedded HTML5 video player in Review Queue (`App.jsx` + FastAPI `/api/media` static mount).
+- [x] Extract YouTube metadata & tags (`generator/download.py`) for dynamic genre-adaptive LLM hook prompting (`select_clips.py`).
+- [x] Fast-path pre-existing YouTube captions (`.vtt`/`.srt` in `transcribe.py`) to bypass Whisper CPU transcription.
+- [x] Automatic local disk cleanup of rejected `.mp4`/`.srt` files and raw source videos (`main.py` & `router.py`).
 - [ ] Connect real YouTube & Instagram API credentials when available.
 - [ ] Implement custom video cropping focal point (face/speaker tracking).
 
