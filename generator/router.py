@@ -1,0 +1,112 @@
+import os
+import sys
+import json
+import argparse
+from datetime import datetime
+from sqlmodel import Session, create_engine, select
+from config import settings
+
+# Import pipeline tools
+from generator.download import download_video
+from generator.speech_based.transcribe import transcribe_audio
+from generator.speech_based.select_clips import select_clips as select_speech_clips
+from generator.render import render_clips_from_list
+from analytics.db.models import Video, Clip
+
+engine = create_engine(settings.DATABASE_URL, echo=False)
+
+def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_model: str = "llama3.1:8b") -> dict:
+    """
+    End-to-end stage 1 pipeline:
+    1. If input is a URL, download video. If local file, use directly.
+    2. Transcribe (speech path) or analyze audio/motion (visual path).
+    3. Select candidate clips.
+    4. Render 9:16 vertical mp4 shorts.
+    5. Record video and clips in the SQLite database.
+    """
+    print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type})")
+    
+    # 1. Download or locate video file
+    if video_input.startswith("http://") or video_input.startswith("https://"):
+        raw_video_path = download_video(video_input)
+    else:
+        raw_video_path = os.path.abspath(video_input)
+
+    if not os.path.exists(raw_video_path):
+        raise FileNotFoundError(f"Raw video path does not exist: {raw_video_path}")
+
+    # 2. Select candidates based on path
+    if video_type == "speech":
+        print("[Router] Path: Speech-based content")
+        transcript_json = transcribe_audio(raw_video_path, model_size="tiny")
+        candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model)
+    elif video_type == "visual":
+        print("[Router] Path: Visual-based content")
+        from generator.visual_based.select_clips import select_visual_clips
+        candidate_clips = select_visual_clips(raw_video_path)
+    else:
+        raise ValueError(f"Unsupported video_type: {video_type}")
+
+    # 3. Render 9:16 vertical clips (with automatic subtitle overlay)
+    print(f"[Router] Rendering {len(candidate_clips)} candidate clips with captions...")
+    rendered_clips = render_clips_from_list(raw_video_path, candidate_clips, transcript_json_path=transcript_json)
+
+    # 4. Save to Database
+    with Session(engine) as session:
+        video_entry = Video(
+            source_url=video_input,
+            video_type=video_type,
+            local_path=raw_video_path,
+            title=os.path.basename(raw_video_path)
+        )
+        session.add(video_entry)
+        session.commit()
+        session.refresh(video_entry)
+
+        db_clips = []
+        for c in rendered_clips:
+            clip_entry = Clip(
+                video_id=video_entry.id,
+                start_time=c["start"],
+                end_time=c["end"],
+                reason=c["reason"],
+                file_path=c["file_path"],
+                title=c["title"],
+                status="pending"
+            )
+            session.add(clip_entry)
+            db_clips.append(clip_entry)
+        
+        video_id = video_entry.id
+        session.commit()
+        for dc in db_clips:
+            session.refresh(dc)
+
+    result = {
+        "video_id": video_id,
+        "raw_video_path": raw_video_path,
+        "video_type": video_type,
+        "clips_generated": len(rendered_clips),
+        "clips": rendered_clips
+    }
+    return result
+
+def main():
+    parser = argparse.ArgumentParser(description="Content Dashboard Generator Router.")
+    parser.add_argument("video_input", help="Video URL or local mp4 file path")
+    parser.add_argument("--type", choices=["speech", "visual"], default="speech", help="Path type")
+    parser.add_argument("--model", default="llama3.1:8b", help="Ollama model for clip selection")
+
+    args = parser.parse_args()
+    try:
+        res = process_video_pipeline(args.video_input, args.type, args.model)
+        print("=" * 50)
+        print(" GENERATION COMPLETED SUCCESSFULLY")
+        print("=" * 50)
+        print(json.dumps(res, indent=2))
+    except Exception as e:
+        print(f"[Error] Generation pipeline failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
