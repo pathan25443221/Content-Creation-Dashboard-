@@ -1,58 +1,71 @@
 import os
 import argparse
 import sys
-import subprocess
-from datetime import datetime
+import json
+import time
+import uuid
+import re
+import yt_dlp
 
 def download_video(url: str, output_dir: str = "generator/raw") -> dict:
     """
-    Downloads a video from a given URL using yt-dlp.
+    Downloads a video from a given URL using yt-dlp native Python API.
     Extracts video metadata (title, tags, category) and downloads YouTube subtitles if available.
     Returns dict containing video_path, sub_path (if any), and metadata.
     """
     os.makedirs(output_dir, exist_ok=True)
     
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    out_template = os.path.join(output_dir, f"video_{timestamp}.%(ext)s")
+    unique_prefix = f"vid_{uuid.uuid4().hex[:8]}"
+    out_template = os.path.join(output_dir, f"{unique_prefix}.%(ext)s")
     
-    cmd = [
-        sys.executable, "-m", "yt_dlp",
-        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "--merge-output-format", "mp4",
-        "--write-info-json",
-        "--write-sub",
-        "--write-auto-sub",
-        "--sub-lang", "en,hi,es",
-        "--sub-format", "vtt/srt",
-        "-o", out_template,
-        url
-    ]
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'merge_output_format': 'mp4',
+        'outtmpl': out_template,
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['hi.*', 'en.*', 'hi', 'en'],
+        'subtitlesformat': 'vtt/srt',
+        'writeinfojson': True,
+        'ignoreerrors': True,
+        'quiet': False,
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+    }
     
     print(f"[Generator] Downloading video & metadata from {url}...")
     try:
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
-        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+            
         video_path = None
         info_json_path = None
         sub_path = None
         
         for file in os.listdir(output_dir):
             full_p = os.path.abspath(os.path.join(output_dir, file))
-            if file.startswith(f"video_{timestamp}"):
-                if file.endswith(".mp4"):
-                    video_path = full_p
-                elif file.endswith(".info.json"):
+            if file.startswith(unique_prefix):
+                if file.endswith(".info.json"):
                     info_json_path = full_p
-                elif file.endswith(".vtt") or file.endswith(".srt"):
-                    if not sub_path or file.endswith(".srt"):  # Prefer srt over vtt if both exist
+                elif file.endswith((".vtt", ".srt")):
+                    if not sub_path or file.endswith(".srt"):
                         sub_path = full_p
+                elif file.endswith((".mp4", ".webm", ".mkv", ".mov", ".avi")) and not file.endswith(".part"):
+                    if not re.search(r'\.f\d+\.', file):
+                        video_path = full_p
 
+        # Fallback: check most recent media file in last 120s
         if not video_path:
-            # Fallback search
+            recent_files = []
+            now = time.time()
             for file in os.listdir(output_dir):
-                if file.startswith(f"video_{timestamp}") and not file.endswith(".json") and not file.endswith(".vtt") and not file.endswith(".srt"):
-                    video_path = os.path.abspath(os.path.join(output_dir, file))
-                    break
+                full_p = os.path.abspath(os.path.join(output_dir, file))
+                if file.endswith((".mp4", ".webm", ".mkv", ".mov", ".avi")) and not file.endswith(".part"):
+                    if not re.search(r'\.f\d+\.', file) and (now - os.path.getmtime(full_p)) <= 120:
+                        recent_files.append((os.path.getmtime(full_p), full_p))
+            if recent_files:
+                recent_files.sort(reverse=True)
+                video_path = recent_files[0][1]
 
         if not video_path:
             raise RuntimeError("Downloaded video file not found on disk.")
@@ -82,8 +95,8 @@ def download_video(url: str, output_dir: str = "generator/raw") -> dict:
             "sub_path": sub_path,
             "metadata": metadata
         }
-    except subprocess.CalledProcessError as e:
-        print(f"[Error] yt-dlp download failed: {e.stderr}", file=sys.stderr)
+    except Exception as e:
+        print(f"[Error] yt-dlp download failed: {str(e)}", file=sys.stderr)
         raise e
 
 def main():

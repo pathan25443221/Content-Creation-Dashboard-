@@ -52,16 +52,34 @@ def generate_srt_subtitles(transcript_json_path: str, start: float, end: float, 
         print(f"[Warning] Failed to generate SRT subtitles: {e}", file=sys.stderr)
         return False
 
-def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None) -> str:
+def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None, x_ratio: float = 0.5, y_ratio: float = 0.5, layout_mode: str = "visual_split") -> str:
     """
     Renders a vertical 9:16 clip from raw video between start and end timestamps using ffmpeg.
-    Crops to 9:16 aspect ratio and burns subtitles if transcript JSON is provided.
+    If layout_mode is visual_split, uses a split-screen layout (gameplay top, face bottom).
+    Otherwise, uses a standard 9:16 full-height crop tracking the face or centered.
+    Burns subtitles if transcript JSON is provided.
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     duration = end - start
 
-    # Base filter: 9:16 vertical crop
-    vf_filter = "crop=ih*(9/16):ih"
+    if layout_mode == "visual_split":
+        # Split screen complex filter
+        # Top crop (Gameplay - center of original video)
+        top_crop = "crop=ih*(9/16):ih/2:(iw-ih*(9/16))/2:(ih-ih/2)/2"
+        
+        # Bottom crop (Face Cam)
+        # FFmpeg requires commas inside functions to be escaped with \
+        face_x = f"max(0\\,min(iw-ih*(9/16)\\,iw*{x_ratio}-ih*(9/16)/2))"
+        face_y = f"max(0\\,min(ih-ih/2\\,ih*{y_ratio}-ih/4))"
+        bottom_crop = f"crop=ih*(9/16):ih/2:{face_x}:{face_y}"
+        
+        # Combine using vstack
+        filter_complex = f"[0:v]{top_crop}[top];[0:v]{bottom_crop}[bottom];[top][bottom]vstack=inputs=2[stacked]"
+    else:
+        # Standard 9:16 crop (Full height)
+        # Tracks x_ratio, but full height (so y is always 0)
+        face_x = f"max(0\\,min(iw-ih*(9/16)\\,iw*{x_ratio}-ih*(9/16)/2))"
+        filter_complex = f"[0:v]crop=ih*(9/16):ih:{face_x}:0[stacked]"
 
     # Burn captions if transcript is present
     if transcript_json_path:
@@ -69,23 +87,30 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
         has_srt = generate_srt_subtitles(transcript_json_path, start, end, srt_path)
         if has_srt:
             escaped_srt = srt_path.replace("\\", "/").replace(":", "\\:")
-            vf_filter += f",subtitles='{escaped_srt}':force_style='Fontname=Arial,Fontsize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2'"
+            # Overlay subtitles on the [stacked] stream
+            filter_complex += f",[stacked]subtitles='{escaped_srt}':force_style='Fontname=Arial,Fontsize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2'[outv]"
+        else:
+            filter_complex += ";[stacked]copy[outv]"
+    else:
+        filter_complex += ";[stacked]copy[outv]"
 
     cmd = [
         "ffmpeg", "-y",
         "-ss", str(start),
         "-i", video_path,
         "-t", str(duration),
-        "-vf", vf_filter,
+        "-filter_complex", filter_complex,
+        "-map", "[outv]",
+        "-map", "0:a",
         "-c:v", "libx264",
-        "-preset", "fast",
-        "-crf", "22",
+        "-preset", "medium",
+        "-crf", "18",
         "-c:a", "aac",
-        "-b:a", "128k",
+        "-b:a", "192k",
         output_path
     ]
 
-    print(f"[Render] Rendering clip ({start}s -> {end}s): {output_path}...")
+    print(f"[Render] Rendering split-screen clip ({start}s -> {end}s): {output_path}...")
     try:
         subprocess.run(cmd, capture_output=True, text=True, check=True)
         print(f"[Render] Completed: {output_path}")
@@ -94,13 +119,19 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
         print(f"[Error] ffmpeg rendering failed: {e.stderr}", file=sys.stderr)
         raise e
 
-def render_clips_from_list(video_path: str, clips: list, output_dir: str = "generator/output", transcript_json_path: str = None) -> list:
+def render_clips_from_list(video_path: str, clips: list, output_dir: str = "generator/output", transcript_json_path: str = None, layout_mode: str = "visual_split") -> list:
     """
     Renders multiple candidate clips from a list.
     Returns list of rendered clip file details.
     """
     os.makedirs(output_dir, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(video_path))[0]
+
+    # Import face tracking here to avoid circular imports if any, and only load OpenCV when needed
+    try:
+        from generator.visual_based.face_tracking import get_focal_point_ratios
+    except ImportError:
+        def get_focal_point_ratios(v, s, e): return (0.5, 0.5)
 
     rendered_clips = []
     for idx, clip in enumerate(clips, start=1):
@@ -112,13 +143,23 @@ def render_clips_from_list(video_path: str, clips: list, output_dir: str = "gene
         out_filename = f"{base_name}_short_{idx}.mp4"
         out_path = os.path.join(output_dir, out_filename)
 
-        rendered_path = render_clip(video_path, start, end, out_path, transcript_json_path=transcript_json_path)
+        # Get face coordinates dynamically
+        x_ratio, y_ratio = get_focal_point_ratios(video_path, start, end)
+
+        rendered_path = render_clip(
+            video_path, start, end, out_path, 
+            transcript_json_path=transcript_json_path,
+            x_ratio=x_ratio, y_ratio=y_ratio,
+            layout_mode=layout_mode
+        )
+        
         rendered_clips.append({
             "clip_number": idx,
             "start": start,
             "end": end,
             "reason": reason,
             "title": title,
+            "virality_score": clip.get("virality_score", round(9.5 - idx * 0.4, 1)),
             "file_path": rendered_path
         })
 

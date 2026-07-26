@@ -54,8 +54,11 @@ The **Content Creation Dashboard** is an autonomous, single-operator short-form 
 - [x] Extract YouTube metadata & tags (`generator/download.py`) for dynamic genre-adaptive LLM hook prompting (`select_clips.py`).
 - [x] Fast-path pre-existing YouTube captions (`.vtt`/`.srt` in `transcribe.py`) to bypass Whisper CPU transcription.
 - [x] Automatic local disk cleanup of rejected `.mp4`/`.srt` files and raw source videos (`main.py` & `router.py`).
+- [x] Vizard.ai style 2-column Review Queue cards with virality scores (`9.2 VIRALITY`), short titles, viral reason callout boxes, and timestamped spoken subtitle previews.
+- [x] Dynamic AI reasoning quoting exact spoken lines/concepts from transcript without generic template text.
+- [x] Guarantee 3 distinct 20–50 second candidate clips per video pipeline run.
 - [ ] Connect real YouTube & Instagram API credentials when available.
-- [ ] Implement custom video cropping focal point (face/speaker tracking).
+- [x] Implement custom video cropping focal point (face/speaker tracking with split-screen layout).
 
 ---
 

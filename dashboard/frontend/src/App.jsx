@@ -15,6 +15,7 @@ export default function App() {
   const [posts, setPosts] = useState([]);
   const [videoInput, setVideoInput] = useState('');
   const [videoType, setVideoType] = useState('speech');
+  const [burnCaptions, setBurnCaptions] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [genMessage, setGenMessage] = useState('');
 
@@ -84,7 +85,7 @@ export default function App() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_input: videoInput, video_type: videoType })
+        body: JSON.stringify({ video_input: videoInput, video_type: videoType, burn_captions: burnCaptions })
       });
 
       const data = await res.json();
@@ -219,10 +220,21 @@ export default function App() {
                   value={videoType}
                   onChange={(e) => setVideoType(e.target.value)}
                 >
-                  <option value="speech">Speech-based (Talking head/Podcast)</option>
-                  <option value="visual">Visual-based (Sports/Gameplay)</option>
+                  <option value="speech">Podcast / Talking Head (AI finds best quotes)</option>
+                  <option value="visual">Action / Gaming (AI finds exciting moments)</option>
+                  <option value="visual_split">Gaming with Facecam (Split Screen)</option>
                 </select>
-                <button type="submit" className="btn-primary" disabled={isGenerating}>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '12px' }}>
+                  <input 
+                    type="checkbox" 
+                    id="burnCaptionsOverview" 
+                    checked={burnCaptions} 
+                    onChange={(e) => setBurnCaptions(e.target.checked)} 
+                    style={{ marginRight: '6px' }}
+                  />
+                  <label htmlFor="burnCaptionsOverview" style={{ fontSize: '0.85rem' }}>Burn Captions</label>
+                </div>
+                <button type="submit" className="btn-primary" disabled={isGenerating} style={{ marginLeft: '12px' }}>
                   {isGenerating ? 'Processing...' : 'Generate Shorts'}
                 </button>
               </form>
@@ -261,9 +273,21 @@ export default function App() {
                     value={videoType}
                     onChange={(e) => setVideoType(e.target.value)}
                   >
-                    <option value="speech">Speech-based — Local Whisper transcription + Ollama LLM clip reasoning</option>
-                    <option value="visual">Visual-based — Librosa audio energy volume spikes + PySceneDetect motion cuts</option>
+                    <option value="speech">Podcast / Talking Head (AI finds best quotes)</option>
+                    <option value="visual">Action / Gaming (AI finds exciting moments)</option>
+                    <option value="visual_split">Gaming with Facecam (Split Screen)</option>
                   </select>
+                </div>
+
+                <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center' }}>
+                  <input 
+                    type="checkbox" 
+                    id="burnCaptionsGenerate" 
+                    checked={burnCaptions} 
+                    onChange={(e) => setBurnCaptions(e.target.checked)} 
+                    style={{ marginRight: '8px', width: '18px', height: '18px' }}
+                  />
+                  <label htmlFor="burnCaptionsGenerate" style={{ fontWeight: 500 }}>Burn Captions (Overlay subtitles on video)</label>
                 </div>
 
                 <button type="submit" className="btn-primary" disabled={isGenerating}>
@@ -280,7 +304,7 @@ export default function App() {
           <div>
             <header className="page-header">
               <h1 className="page-title">Review Queue</h1>
-              <p className="page-subtitle">Review candidate clips selected by local models before publishing.</p>
+              <p className="page-subtitle">Review candidate clips selected by local AI models before publishing.</p>
             </header>
 
             {clips.length === 0 ? (
@@ -288,54 +312,73 @@ export default function App() {
                 No candidate clips awaiting review. Use "Generate Clip" to process a new video!
               </div>
             ) : (
-              <div className="review-grid">
-                {clips.map((clip) => (
-                  <div key={clip.id} className="review-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className="badge badge-pending">Pending Review</span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{clip.duration}s clip ({clip.start_time}s - {clip.end_time}s)</span>
+              <div className="vizard-review-list">
+                {clips.map((clip, idx) => (
+                  <div key={clip.id} className="vizard-card">
+                    {/* Left Column: 9:16 Vertical Video Player */}
+                    <div className="vizard-media-col">
+                      {clip.media_url && (
+                        <div className="vizard-player-container">
+                          <video 
+                            src={clip.media_url} 
+                            controls 
+                            preload="metadata"
+                            className="vizard-video"
+                          />
+                        </div>
+                      )}
                     </div>
 
-                    {clip.media_url && (
-                      <div style={{ borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000', display: 'flex', justifyContent: 'center' }}>
-                        <video 
-                          src={clip.media_url} 
-                          controls 
-                          preload="metadata"
-                          style={{ width: '100%', maxHeight: '320px', objectFit: 'contain' }} 
-                        />
+                    {/* Right Column: Vizard Card Details */}
+                    <div className="vizard-details-col">
+                      <div className="vizard-header-row">
+                        <h2 className="vizard-title">
+                          <span className="vizard-num">#{idx + 1}</span> {clip.title}
+                        </h2>
                       </div>
-                    )}
 
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Title / Caption</label>
-                      <input 
-                        type="text" 
-                        className="url-input" 
-                        defaultValue={clip.title}
-                        onBlur={(e) => clip.title = e.target.value}
-                        style={{ width: '100%', marginTop: '4px' }}
-                      />
-                    </div>
+                      {/* Virality Score and Actions Bar */}
+                      <div className="vizard-score-actions-row">
+                        <div className="vizard-virality-badge">
+                          <span className="vizard-score-val">{clip.virality_score || 8.5}</span>
+                          <span className="vizard-score-lbl">VIRALITY</span>
+                        </div>
 
-                    <div className="reason-box">
-                      <strong>AI Reasoning:</strong> {clip.reason}
-                    </div>
+                        <div className="vizard-action-group">
+                          <button 
+                            className="vizard-btn-publish" 
+                            onClick={() => handleApprove(clip.id, clip.title)}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                            Publish
+                          </button>
+                          <button 
+                            className="vizard-btn-reject"
+                            onClick={() => handleReject(clip.id)}
+                            title="Reject clip"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                          </button>
+                        </div>
+                      </div>
 
-                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
-                      <button 
-                        className="btn-primary" 
-                        style={{ flex: 1 }}
-                        onClick={() => handleApprove(clip.id, clip.title)}
-                      >
-                        Approve & Queue
-                      </button>
-                      <button 
-                        className="btn-danger"
-                        onClick={() => handleReject(clip.id)}
-                      >
-                        Reject
-                      </button>
+                      {/* Viral Reason Callout Container */}
+                      <div className="vizard-reason-card">
+                        <div className="vizard-reason-label">Viral reason</div>
+                        <div className="vizard-reason-text">{clip.reason}</div>
+                      </div>
+
+                      {/* Timestamped Subtitle Transcript Preview */}
+                      {clip.transcript_lines && clip.transcript_lines.length > 0 && (
+                        <div className="vizard-transcript-container">
+                          {clip.transcript_lines.map((line, lIdx) => (
+                            <div key={lIdx} className="vizard-transcript-line">
+                              <span className="vizard-ts">{line.timestamp}</span>
+                              <span className="vizard-txt">{line.text}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

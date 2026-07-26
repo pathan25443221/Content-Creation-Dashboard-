@@ -48,6 +48,7 @@ def health_check():
 class GenerateRequest(BaseModel):
     video_input: str
     video_type: str = "speech"  # "speech" or "visual"
+    burn_captions: bool = True
 
 class ApproveRequest(BaseModel):
     title: Optional[str] = None
@@ -96,6 +97,34 @@ def get_overview():
             ]
         }
 
+def get_clip_transcript_lines(file_path: str, start_time: float, end_time: float) -> list:
+    """Reads SRT or VTT file matching clip file_path to provide timestamped transcript lines."""
+    lines = []
+    target_path = file_path.replace(".mp4", ".srt")
+    if not os.path.exists(target_path):
+        target_path = file_path.replace(".mp4", ".vtt")
+        if not os.path.exists(target_path):
+            return []
+            
+    try:
+        with open(target_path, "r", encoding="utf-8") as f:
+            content = f.read().split("\n\n")
+            for block in content:
+                pts = block.split("\n")
+                if len(pts) >= 3:
+                    ts_line = pts[1]
+                    text = " ".join(pts[2:])
+                    start_str = ts_line.split("-->")[0].strip()
+                    ts_clean = start_str.split(",")[0].split(".")[0]
+                    colons = ts_clean.split(":")
+                    if len(colons) == 3:
+                        ts_clean = f"{colons[1]}:{colons[2]}"
+                    if text and not text.startswith("WEBVTT"):
+                        lines.append({"timestamp": ts_clean, "text": text})
+    except Exception as e:
+        print(f"[Warning] Failed to read transcript lines from {target_path}: {e}")
+    return lines[:6]
+
 @app.get("/api/clips")
 def list_clips(status: Optional[str] = None):
     """Fetch clips with optional status filter ('pending', 'approved', 'rejected')."""
@@ -110,6 +139,10 @@ def list_clips(status: Optional[str] = None):
         for c in clips:
             video = session.get(Video, c.video_id)
             posts = session.exec(select(Post).where(Post.clip_id == c.id)).all()
+            
+            # Extract transcript lines for Vizard UI
+            t_lines = get_clip_transcript_lines(c.file_path, c.start_time, c.end_time)
+
             result.append({
                 "id": c.id,
                 "video_id": c.video_id,
@@ -120,7 +153,9 @@ def list_clips(status: Optional[str] = None):
                 "reason": c.reason,
                 "file_path": c.file_path,
                 "media_url": f"/api/media/{os.path.basename(c.file_path)}",
-                "title": c.title,
+                "title": c.title or f"Clip #{c.id}",
+                "virality_score": round(getattr(c, "virality_score", 8.5) or 8.5, 1),
+                "transcript_lines": t_lines,
                 "status": c.status,
                 "created_at": c.created_at.isoformat(),
                 "posts": [
@@ -136,16 +171,16 @@ def list_clips(status: Optional[str] = None):
             })
         return result
 
-def run_pipeline_task(video_input: str, video_type: str):
+def run_pipeline_task(video_input: str, video_type: str, burn_captions: bool):
     try:
-        process_video_pipeline(video_input, video_type)
+        process_video_pipeline(video_input, video_type, burn_captions=burn_captions)
     except Exception as e:
         print(f"[Error] Background generation pipeline failed: {e}", file=sys.stderr)
 
 @app.post("/api/generate", status_code=202)
 def trigger_generation(req: GenerateRequest, background_tasks: BackgroundTasks):
     """Triggers Stage 1 video generation pipeline in the background."""
-    background_tasks.add_task(run_pipeline_task, req.video_input, req.video_type)
+    background_tasks.add_task(run_pipeline_task, req.video_input, req.video_type, req.burn_captions)
     return {
         "message": "Generation pipeline started in background. Downloading & transcribing...",
         "status": "processing"

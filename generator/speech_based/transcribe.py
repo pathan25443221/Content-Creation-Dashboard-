@@ -81,7 +81,7 @@ def parse_subtitles_to_transcript_json(sub_path: str, video_path: str) -> str:
     print(f"[Transcribe] FAST-PATH Complete! Saved transcript with {len(segments)} segments to: {output_json_path}")
     return os.path.abspath(output_json_path)
 
-def transcribe_audio(video_path: str, model_size: str = "tiny", device: str = "cpu", sub_path: str = None) -> str:
+def transcribe_audio(video_path: str, model_size: str = "small", device: str = "cpu", sub_path: str = None) -> str:
     """
     Transcribes audio from a video file using pre-existing subtitles if available,
     or falls back to faster-whisper locally.

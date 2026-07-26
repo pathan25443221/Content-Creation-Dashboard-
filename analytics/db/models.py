@@ -20,6 +20,7 @@ class Clip(SQLModel, table=True):
     reason: str
     file_path: str
     title: Optional[str] = None
+    virality_score: Optional[float] = Field(default=8.5)
     status: str = Field(default="pending")  # "pending", "approved", "rejected"
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

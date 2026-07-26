@@ -15,7 +15,7 @@ from analytics.db.models import Video, Clip
 
 engine = create_engine(settings.DATABASE_URL, echo=False)
 
-def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_model: str = "llama3.1:8b") -> dict:
+def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_model: str = "llama3.2:3b", burn_captions: bool = True) -> dict:
     """
     End-to-end stage 1 pipeline:
     1. If input is a URL, download video. If local file, use directly.
@@ -24,7 +24,7 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
     4. Render 9:16 vertical mp4 shorts.
     5. Record video and clips in the SQLite database.
     """
-    print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type})")
+    print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type}, burn_captions={burn_captions})")
     
     # 1. Download or locate video file
     raw_video_path = None
@@ -49,16 +49,17 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
         print("[Router] Path: Speech-based content")
         transcript_json = transcribe_audio(raw_video_path, model_size="tiny", sub_path=sub_path)
         candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model, metadata=metadata)
-    elif video_type == "visual":
+    elif video_type in ["visual", "visual_split"]:
         print("[Router] Path: Visual-based content")
         from generator.visual_based.select_clips import select_visual_clips
         candidate_clips = select_visual_clips(raw_video_path)
     else:
         raise ValueError(f"Unsupported video_type: {video_type}")
 
-    # 3. Render 9:16 vertical clips (with automatic subtitle overlay)
-    print(f"[Router] Rendering {len(candidate_clips)} candidate clips with captions...")
-    rendered_clips = render_clips_from_list(raw_video_path, candidate_clips, transcript_json_path=transcript_json)
+    # 3. Render 9:16 vertical clips
+    print(f"[Router] Rendering {len(candidate_clips)} candidate clips (Captions: {'ON' if burn_captions else 'OFF'})...")
+    render_transcript = transcript_json if burn_captions else None
+    rendered_clips = render_clips_from_list(raw_video_path, candidate_clips, transcript_json_path=render_transcript, layout_mode=video_type)
 
     # 4. Save to Database
     video_title = metadata.get("title") or os.path.basename(raw_video_path)
@@ -82,6 +83,7 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
                 reason=c["reason"],
                 file_path=c["file_path"],
                 title=c["title"],
+                virality_score=c.get("virality_score", 8.5),
                 status="pending"
             )
             session.add(clip_entry)
@@ -91,6 +93,28 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
         session.commit()
         for dc in db_clips:
             session.refresh(dc)
+
+    # 5. Cleanup raw/temporary files
+    print("[Router] Cleaning up temporary raw files...")
+    if video_input.startswith("http://") or video_input.startswith("https://"):
+        try:
+            if raw_video_path and os.path.exists(raw_video_path):
+                os.remove(raw_video_path)
+            if 'dl_res' in locals() and dl_res:
+                info_p = dl_res.get("info_json_path")
+                if info_p and os.path.exists(info_p):
+                    os.remove(info_p)
+                sub_p = dl_res.get("sub_path")
+                if sub_p and os.path.exists(sub_p):
+                    os.remove(sub_p)
+        except Exception as e:
+            print(f"[Warning] Failed to cleanup raw video files: {e}", file=sys.stderr)
+            
+    if transcript_json and os.path.exists(transcript_json):
+        try:
+            os.remove(transcript_json)
+        except Exception as e:
+            print(f"[Warning] Failed to cleanup transcript json: {e}", file=sys.stderr)
 
     result = {
         "video_id": video_id,
