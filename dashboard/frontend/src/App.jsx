@@ -16,8 +16,39 @@ export default function App() {
   const [videoInput, setVideoInput] = useState('');
   const [videoType, setVideoType] = useState('speech');
   const [burnCaptions, setBurnCaptions] = useState(true);
+  const [captionColor, setCaptionColor] = useState('white');
+  const [captionAnimation, setCaptionAnimation] = useState('none');
+  const [quantity, setQuantity] = useState(3);
+  const [quality, setQuality] = useState('high');
   const [isGenerating, setIsGenerating] = useState(false);
   const [genMessage, setGenMessage] = useState('');
+  const [progressMsg, setProgressMsg] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Connect to SSE stream
+  useEffect(() => {
+    const sse = new EventSource('/api/stream');
+    sse.onmessage = (event) => {
+      if (event.data === 'update') {
+        setRefreshTrigger(prev => prev + 1);
+      } else if (event.data.startsWith('progress:')) {
+        const msg = event.data.substring(9);
+        if (msg === 'done') {
+            setProgressMsg(null);
+            setIsGenerating(false);
+            setGenMessage('Generation complete! Check Review tab.');
+        } else if (msg.startsWith('Error:')) {
+            setProgressMsg(null);
+            setIsGenerating(false);
+            setGenMessage(msg);
+        } else {
+            setProgressMsg(msg);
+            setIsGenerating(true);
+        }
+      }
+    };
+    return () => sse.close();
+  }, []);
 
   // Fetch overview data
   const fetchOverview = async () => {
@@ -64,15 +95,7 @@ export default function App() {
     if (activeTab === 'review') fetchClips('pending');
     if (activeTab === 'posts') fetchPosts();
     if (activeTab === 'clips') fetchClips();
-
-    // Auto-poll overview and pending clips every 5 seconds to catch completed background generations
-    const interval = setInterval(() => {
-      fetchOverview();
-      if (activeTab === 'review') fetchClips('pending');
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [activeTab]);
+  }, [activeTab, refreshTrigger]);
 
   const handleGenerateSubmit = async (e) => {
     e.preventDefault();
@@ -85,17 +108,23 @@ export default function App() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_input: videoInput, video_type: videoType, burn_captions: burnCaptions })
+        body: JSON.stringify({ 
+          video_input: videoInput, 
+          video_type: videoType, 
+          burn_captions: burnCaptions,
+          quantity: quantity,
+          quality: quality,
+          caption_color: captionColor,
+          caption_animation: captionAnimation
+        })
       });
 
       const data = await res.json();
       if (res.ok || res.status === 202) {
         setGenMessage('⚡ Processing active in background! Clips will automatically land in the Review Queue when rendered.');
         setVideoInput('');
-        setTimeout(() => {
-          setIsGenerating(false);
-          setActiveTab('review');
-        }, 1500);
+        setProgressMsg("Initializing...");
+        setIsGenerating(true);
       } else {
         setGenMessage(`Error: ${data.detail || 'Generation failed'}`);
         setIsGenerating(false);
@@ -175,6 +204,19 @@ export default function App() {
         </nav>
       </aside>
 
+      {isGenerating && progressMsg && (
+        <div className="progress-overlay">
+          <div className="progress-modal">
+            <div className="spinner"></div>
+            <h3>Generating Magic ✨</h3>
+            <p className="progress-text">{progressMsg}</p>
+            <div className="progress-bar-container">
+               <div className="progress-bar-fill"></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Screen Content */}
       <main className="main-content">
         {/* Overview Tab */}
@@ -219,11 +261,37 @@ export default function App() {
                   className="select-input"
                   value={videoType}
                   onChange={(e) => setVideoType(e.target.value)}
+                  style={{ width: '220px' }}
                 >
                   <option value="speech">Podcast / Talking Head (AI finds best quotes)</option>
+                  <option value="vlog">Vlog (Dynamically tracks face, centers if missing)</option>
                   <option value="visual">Action / Gaming (AI finds exciting moments)</option>
                   <option value="visual_split">Gaming with Facecam (Split Screen)</option>
                 </select>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '12px' }}>
+                  <label style={{ fontSize: '0.85rem', marginRight: '6px' }}>Quantity:</label>
+                  <input 
+                    type="number" 
+                    className="select-input" 
+                    style={{ width: '60px', padding: '6px' }}
+                    min="1" max="10" 
+                    value={quantity} 
+                    onChange={(e) => setQuantity(parseInt(e.target.value))} 
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', marginLeft: '12px' }}>
+                  <label style={{ fontSize: '0.85rem', marginRight: '6px' }}>Quality:</label>
+                  <select 
+                    className="select-input"
+                    value={quality}
+                    onChange={(e) => setQuality(e.target.value)}
+                    style={{ padding: '6px' }}
+                  >
+                    <option value="high">High (1080p, Best)</option>
+                    <option value="medium">Medium (1080p, Faster)</option>
+                    <option value="low">Low (720p, Fastest)</option>
+                  </select>
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', marginLeft: '12px' }}>
                   <input 
                     type="checkbox" 
@@ -232,8 +300,24 @@ export default function App() {
                     onChange={(e) => setBurnCaptions(e.target.checked)} 
                     style={{ marginRight: '6px' }}
                   />
-                  <label htmlFor="burnCaptionsOverview" style={{ fontSize: '0.85rem' }}>Burn Captions</label>
                 </div>
+                {burnCaptions && (
+                  <div style={{ display: 'flex', alignItems: 'center', marginLeft: '12px' }}>
+                    <label style={{ fontSize: '0.85rem', marginRight: '6px' }}>Color:</label>
+                    <select className="select-input" style={{ padding: '6px', marginRight: '6px' }} value={captionColor} onChange={(e) => setCaptionColor(e.target.value)}>
+                      <option value="white">White</option>
+                      <option value="yellow">Yellow</option>
+                      <option value="green">Green</option>
+                      <option value="cyan">Cyan</option>
+                    </select>
+                    <label style={{ fontSize: '0.85rem', marginRight: '6px' }}>Anim:</label>
+                    <select className="select-input" style={{ padding: '6px' }} value={captionAnimation} onChange={(e) => setCaptionAnimation(e.target.value)}>
+                      <option value="none">None</option>
+                      <option value="pop">Pop</option>
+                      <option value="fade">Fade</option>
+                    </select>
+                  </div>
+                )}
                 <button type="submit" className="btn-primary" disabled={isGenerating} style={{ marginLeft: '12px' }}>
                   {isGenerating ? 'Processing...' : 'Generate Shorts'}
                 </button>
@@ -274,9 +358,36 @@ export default function App() {
                     onChange={(e) => setVideoType(e.target.value)}
                   >
                     <option value="speech">Podcast / Talking Head (AI finds best quotes)</option>
+                    <option value="vlog">Vlog (Dynamically tracks face, centers if missing)</option>
                     <option value="visual">Action / Gaming (AI finds exciting moments)</option>
                     <option value="visual_split">Gaming with Facecam (Split Screen)</option>
                   </select>
+                </div>
+
+                <div style={{ marginBottom: '24px', display: 'flex', gap: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Quantity of Shorts</label>
+                    <input 
+                      type="number" 
+                      className="select-input" 
+                      style={{ width: '120px' }}
+                      min="1" max="10" 
+                      value={quantity} 
+                      onChange={(e) => setQuantity(parseInt(e.target.value))} 
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Render Quality</label>
+                    <select 
+                      className="select-input"
+                      value={quality}
+                      onChange={(e) => setQuality(e.target.value)}
+                    >
+                      <option value="high">High (4K/1080p, Visually Lossless)</option>
+                      <option value="medium">Medium (1080p, Standard Compression)</option>
+                      <option value="low">Low (720p, Fastest Render)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center' }}>
@@ -289,6 +400,36 @@ export default function App() {
                   />
                   <label htmlFor="burnCaptionsGenerate" style={{ fontWeight: 500 }}>Burn Captions (Overlay subtitles on video)</label>
                 </div>
+
+                {burnCaptions && (
+                  <div style={{ marginBottom: '24px', display: 'flex', gap: '20px' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Caption Color</label>
+                      <select 
+                        className="select-input"
+                        value={captionColor}
+                        onChange={(e) => setCaptionColor(e.target.value)}
+                      >
+                        <option value="white">White</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="green">Green</option>
+                        <option value="cyan">Cyan</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 500 }}>Caption Animation</label>
+                      <select 
+                        className="select-input"
+                        value={captionAnimation}
+                        onChange={(e) => setCaptionAnimation(e.target.value)}
+                      >
+                        <option value="none">None (Standard)</option>
+                        <option value="pop">Pop (TikTok/Reels Bounce)</option>
+                        <option value="fade">Fade In</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 <button type="submit" className="btn-primary" disabled={isGenerating}>
                   {isGenerating ? 'Running Pipeline...' : 'Start Clip Generation'}

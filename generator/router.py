@@ -15,7 +15,7 @@ from analytics.db.models import Video, Clip
 
 engine = create_engine(settings.DATABASE_URL, echo=False)
 
-def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_model: str = "llama3.2:3b", burn_captions: bool = True) -> dict:
+def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_model: str = "llama3.2:3b", burn_captions: bool = True, quantity: int = 3, quality: str = "high", caption_color: str = "white", caption_animation: str = "none", progress_callback=None) -> dict:
     """
     End-to-end stage 1 pipeline:
     1. If input is a URL, download video. If local file, use directly.
@@ -24,15 +24,17 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
     4. Render 9:16 vertical mp4 shorts.
     5. Record video and clips in the SQLite database.
     """
-    print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type}, burn_captions={burn_captions})")
+    print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type}, burn_captions={burn_captions}, quantity={quantity}, quality={quality})")
     
     # 1. Download or locate video file
     raw_video_path = None
     sub_path = None
     metadata = {}
+    if progress_callback: progress_callback("Initializing...")
     
     if video_input.startswith("http://") or video_input.startswith("https://"):
-        dl_res = download_video(video_input)
+        if progress_callback: progress_callback("Downloading video (this might take a bit depending on quality)...")
+        dl_res = download_video(video_input, quality=quality)
         raw_video_path = dl_res["video_path"]
         sub_path = dl_res.get("sub_path")
         metadata = dl_res.get("metadata", {})
@@ -45,23 +47,41 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
 
     # 2. Select candidates based on path
     transcript_json = None
-    if video_type == "speech":
-        print("[Router] Path: Speech-based content")
+    if video_type in ["speech", "vlog"]:
+        print(f"[Router] Path: Speech-based content (mode: {video_type})")
+        if progress_callback: progress_callback("Transcribing audio (AI listening)...")
         transcript_json = transcribe_audio(raw_video_path, model_size="tiny", sub_path=sub_path)
+        if progress_callback: progress_callback("AI is reading transcript to find the best viral hooks...")
         candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model, metadata=metadata)
     elif video_type in ["visual", "visual_split"]:
         print("[Router] Path: Visual-based content")
+        if progress_callback: progress_callback("Scanning video for action and motion spikes...")
         from generator.visual_based.select_clips import select_visual_clips
         candidate_clips = select_visual_clips(raw_video_path)
     else:
         raise ValueError(f"Unsupported video_type: {video_type}")
 
+    # Truncate candidates to user-requested quantity
+    if len(candidate_clips) > quantity:
+        print(f"[Router] Truncating candidate clips from {len(candidate_clips)} to requested quantity {quantity}.")
+        candidate_clips = candidate_clips[:quantity]
+
     # 3. Render 9:16 vertical clips
-    print(f"[Router] Rendering {len(candidate_clips)} candidate clips (Captions: {'ON' if burn_captions else 'OFF'})...")
+    print(f"[Router] Rendering {len(candidate_clips)} candidate clips (Captions: {'ON' if burn_captions else 'OFF'}, Quality: {quality})...")
+    if progress_callback: progress_callback(f"Rendering {len(candidate_clips)} perfect short clips...")
     render_transcript = transcript_json if burn_captions else None
-    rendered_clips = render_clips_from_list(raw_video_path, candidate_clips, transcript_json_path=render_transcript, layout_mode=video_type)
+    rendered_clips = render_clips_from_list(
+        raw_video_path, 
+        candidate_clips, 
+        transcript_json_path=render_transcript, 
+        layout_mode=video_type,
+        quality=quality,
+        caption_color=caption_color,
+        caption_animation=caption_animation
+    )
 
     # 4. Save to Database
+    if progress_callback: progress_callback("Saving everything to database...")
     video_title = metadata.get("title") or os.path.basename(raw_video_path)
     with Session(engine) as session:
         video_entry = Video(

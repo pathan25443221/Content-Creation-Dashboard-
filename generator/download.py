@@ -7,7 +7,7 @@ import uuid
 import re
 import yt_dlp
 
-def download_video(url: str, output_dir: str = "generator/raw") -> dict:
+def download_video(url: str, output_dir: str = "generator/raw", quality: str = "high") -> dict:
     """
     Downloads a video from a given URL using yt-dlp native Python API.
     Extracts video metadata (title, tags, category) and downloads YouTube subtitles if available.
@@ -18,8 +18,15 @@ def download_video(url: str, output_dir: str = "generator/raw") -> dict:
     unique_prefix = f"vid_{uuid.uuid4().hex[:8]}"
     out_template = os.path.join(output_dir, f"{unique_prefix}.%(ext)s")
     
+    # Select download format based on requested quality to save bandwidth
+    format_str = 'bestvideo+bestaudio/best'
+    if quality == "medium":
+        format_str = 'bestvideo[height<=1080]+bestaudio/best'
+    elif quality == "low":
+        format_str = 'bestvideo[height<=720]+bestaudio/best'
+
     ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
+        'format': format_str,
         'merge_output_format': 'mp4',
         'outtmpl': out_template,
         'writesubtitles': True,

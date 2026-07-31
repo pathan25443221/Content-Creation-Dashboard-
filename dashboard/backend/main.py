@@ -2,7 +2,9 @@ import os
 import sys
 from typing import Optional, List
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks
+import asyncio
+from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -21,6 +23,22 @@ app = FastAPI(
     description="Backend API serving the single-operator content generation, review, publishing, and analytics dashboard.",
     version="1.0.0"
 )
+
+# SSE Global State
+connected_clients = set()
+main_loop = None
+
+@app.on_event("startup")
+async def startup_event():
+    global main_loop
+    main_loop = asyncio.get_running_loop()
+
+def notify_clients(event_data: str):
+    """Safely notifies all connected SSE clients from sync or async contexts."""
+    if not main_loop:
+        return
+    for q in list(connected_clients):
+        main_loop.call_soon_threadsafe(q.put_nowait, event_data)
 
 # Enable CORS for React frontend (Vite dev server)
 app.add_middleware(
@@ -44,11 +62,32 @@ def health_check():
         "timestamp": datetime.utcnow().isoformat()
     }
 
+@app.get("/api/stream")
+async def sse_stream(request: Request):
+    """Server-Sent Events endpoint for real-time UI updates."""
+    async def event_generator():
+        q = asyncio.Queue()
+        connected_clients.add(q)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                data = await q.get()
+                yield f"data: {data}\n\n"
+        finally:
+            connected_clients.remove(q)
+            
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 # Pydantic Request Models
 class GenerateRequest(BaseModel):
     video_input: str
-    video_type: str = "speech"  # "speech" or "visual"
+    video_type: str = "speech"
     burn_captions: bool = True
+    quantity: int = 3
+    quality: str = "high"
+    caption_color: str = "white"
+    caption_animation: str = "none"
 
 class ApproveRequest(BaseModel):
     title: Optional[str] = None
@@ -171,16 +210,33 @@ def list_clips(status: Optional[str] = None):
             })
         return result
 
-def run_pipeline_task(video_input: str, video_type: str, burn_captions: bool):
+def run_pipeline_task(video_input: str, video_type: str, burn_captions: bool, quantity: int, quality: str, caption_color: str, caption_animation: str):
     try:
-        process_video_pipeline(video_input, video_type, burn_captions=burn_captions)
+        process_video_pipeline(
+            video_input, video_type, burn_captions=burn_captions, 
+            quantity=quantity, quality=quality,
+            caption_color=caption_color, caption_animation=caption_animation,
+            progress_callback=lambda msg: notify_clients(f"progress:{msg}")
+        )
+        notify_clients("update")
+        notify_clients("progress:done")
     except Exception as e:
         print(f"[Error] Background generation pipeline failed: {e}", file=sys.stderr)
+        notify_clients(f"progress:Error: {str(e)}")
 
 @app.post("/api/generate", status_code=202)
 def trigger_generation(req: GenerateRequest, background_tasks: BackgroundTasks):
     """Triggers Stage 1 video generation pipeline in the background."""
-    background_tasks.add_task(run_pipeline_task, req.video_input, req.video_type, req.burn_captions)
+    background_tasks.add_task(
+        run_pipeline_task, 
+        req.video_input, 
+        req.video_type, 
+        req.burn_captions,
+        req.quantity,
+        req.quality,
+        req.caption_color,
+        req.caption_animation
+    )
     return {
         "message": "Generation pipeline started in background. Downloading & transcribing...",
         "status": "processing"
@@ -204,6 +260,7 @@ def approve_clip(clip_id: int, req: ApproveRequest):
     
     # Process queue synchronously or via worker
     process_publishing_queue()
+    notify_clients("update")
 
     return {
         "message": f"Clip {clip_id} approved and queued for publishing.",
@@ -251,7 +308,8 @@ def reject_clip(clip_id: int):
                 except Exception as e:
                     print(f"[Warning] Failed to delete raw video file {video.local_path}: {e}", file=sys.stderr)
 
-    return {"message": f"Clip {clip_id} rejected and files cleaned from disk."}
+    notify_clients("update")
+    return {"message": f"Clip {clip_id} rejected and files cleaned up."}
 
 @app.get("/api/posts")
 def list_posts():

@@ -4,8 +4,11 @@ import json
 import argparse
 import subprocess
 
-def generate_srt_subtitles(transcript_json_path: str, start: float, end: float, srt_out_path: str) -> bool:
-    """Generates an SRT subtitle file for segments within [start, end]."""
+def generate_srt_subtitles(transcript_json_path: str, start: float, end: float, srt_out_path: str, animation: str = "none") -> bool:
+    """
+    Generates an SRT file for the specific clip window.
+    If animation is 'pop' or 'fade', injects ASS override tags.
+    """
     if not transcript_json_path or not os.path.exists(transcript_json_path):
         return False
         
@@ -45,24 +48,47 @@ def generate_srt_subtitles(transcript_json_path: str, start: float, end: float, 
             for idx, seg in enumerate(clip_segments, start=1):
                 f.write(f"{idx}\n")
                 f.write(f"{format_timestamp(seg['start'])} --> {format_timestamp(seg['end'])}\n")
-                f.write(f"{seg['text']}\n\n")
+                
+                text = seg['text']
+                # Inject ASS tags if animation is requested
+                if animation == "pop":
+                    text = f"{{\\fscx50\\fscy50\\t(0,150,\\fscx100\\fscy100)}}{text}"
+                elif animation == "fade":
+                    text = f"{{\\fad(200,0)}}{text}"
+                    
+                f.write(f"{text}\n\n")
 
         return True
     except Exception as e:
         print(f"[Warning] Failed to generate SRT subtitles: {e}", file=sys.stderr)
         return False
 
-def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None, x_ratio: float = 0.5, y_ratio: float = 0.5, layout_mode: str = "visual_split") -> str:
+def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None, x_ratio: float = 0.5, y_ratio: float = 0.5, layout_mode: str = "visual_split", quality: str = "high", dynamic_ratios: list = None, caption_color: str = "white", caption_animation: str = "none") -> str:
     """
     Renders a vertical 9:16 clip from raw video between start and end timestamps using ffmpeg.
     If layout_mode is visual_split, uses a split-screen layout (gameplay top, face bottom).
     Otherwise, uses a standard 9:16 full-height crop tracking the face or centered.
     Burns subtitles if transcript JSON is provided.
+    quality determines FFmpeg encoding parameters (high, medium, low).
     """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     duration = end - start
 
-    if layout_mode == "visual_split":
+    if layout_mode == "vlog" and dynamic_ratios:
+        # Dynamic framing: Split the already-trimmed input video into 1s chunks and crop each dynamically
+        filter_complex = ""
+        for i, chunk in enumerate(dynamic_ratios):
+            c_start = max(0, chunk["start"] - start)
+            c_end = min(duration, chunk["end"] - start)
+            # Full height crop, but dynamic X
+            fx = f"max(0\\,min(iw-ih*(9/16)\\,iw*{chunk['x_ratio']}-ih*(9/16)/2))"
+            filter_complex += f"[0:v]trim=start={c_start}:end={c_end},setpts=PTS-STARTPTS,crop=ih*(9/16):ih:{fx}:0[v{i}];"
+        
+        # Concat all the chunks
+        concat_inputs = "".join([f"[v{i}]" for i in range(len(dynamic_ratios))])
+        filter_complex += f"{concat_inputs}concat=n={len(dynamic_ratios)}:v=1:a=0[stacked]"
+
+    elif layout_mode == "visual_split":
         # Split screen complex filter
         # Top crop (Gameplay - center of original video)
         top_crop = "crop=ih*(9/16):ih/2:(iw-ih*(9/16))/2:(ih-ih/2)/2"
@@ -84,29 +110,54 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
     # Burn captions if transcript is present
     if transcript_json_path:
         srt_path = output_path.replace(".mp4", ".srt")
-        has_srt = generate_srt_subtitles(transcript_json_path, start, end, srt_path)
+        has_srt = generate_srt_subtitles(transcript_json_path, start, end, srt_path, animation=caption_animation)
         if has_srt:
             escaped_srt = srt_path.replace("\\", "/").replace(":", "\\:")
+            
+            # Map color string to ASS hex BGR
+            color_map = {
+                "white": "&H00FFFFFF",
+                "yellow": "&H0000FFFF",
+                "green": "&H0000FF00",
+                "cyan": "&H00FFFF00"
+            }
+            ass_color = color_map.get(caption_color, "&H00FFFFFF")
+            
             # Overlay subtitles on the [stacked] stream
-            filter_complex += f",[stacked]subtitles='{escaped_srt}':force_style='Fontname=Arial,Fontsize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2'[outv]"
+            filter_complex += f",[stacked]subtitles='{escaped_srt}':force_style='Fontname=Arial,Fontsize=18,PrimaryColour={ass_color},OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2'[outv]"
         else:
             filter_complex += ";[stacked]copy[outv]"
     else:
         filter_complex += ";[stacked]copy[outv]"
 
+    # Adjust encoding parameters based on requested quality
+    preset = "medium"
+    crf = "18"
+    audio_bitrate = "192k"
+    
+    if quality == "medium":
+        preset = "fast"
+        crf = "23"
+        audio_bitrate = "128k"
+    elif quality == "low":
+        preset = "veryfast"
+        crf = "28"
+        audio_bitrate = "96k"
+
     cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg",
+        "-y",
         "-ss", str(start),
-        "-i", video_path,
         "-t", str(duration),
+        "-i", video_path,
         "-filter_complex", filter_complex,
         "-map", "[outv]",
         "-map", "0:a",
         "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "18",
+        "-preset", preset,
+        "-crf", crf,
         "-c:a", "aac",
-        "-b:a", "192k",
+        "-b:a", audio_bitrate,
         output_path
     ]
 
@@ -119,7 +170,7 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
         print(f"[Error] ffmpeg rendering failed: {e.stderr}", file=sys.stderr)
         raise e
 
-def render_clips_from_list(video_path: str, clips: list, output_dir: str = "generator/output", transcript_json_path: str = None, layout_mode: str = "visual_split") -> list:
+def render_clips_from_list(video_path: str, clips: list, output_dir: str = "generator/output", transcript_json_path: str = None, layout_mode: str = "visual_split", quality: str = "high", caption_color: str = "white", caption_animation: str = "none") -> list:
     """
     Renders multiple candidate clips from a list.
     Returns list of rendered clip file details.
@@ -129,9 +180,10 @@ def render_clips_from_list(video_path: str, clips: list, output_dir: str = "gene
 
     # Import face tracking here to avoid circular imports if any, and only load OpenCV when needed
     try:
-        from generator.visual_based.face_tracking import get_focal_point_ratios
+        from generator.visual_based.face_tracking import get_focal_point_ratios, get_dynamic_focal_ratios
     except ImportError:
         def get_focal_point_ratios(v, s, e): return (0.5, 0.5)
+        def get_dynamic_focal_ratios(v, s, e, chunk_size=1.0): return [{"start":s, "end":e, "x_ratio":0.5, "y_ratio":0.5}]
 
     rendered_clips = []
     for idx, clip in enumerate(clips, start=1):
@@ -144,13 +196,22 @@ def render_clips_from_list(video_path: str, clips: list, output_dir: str = "gene
         out_path = os.path.join(output_dir, out_filename)
 
         # Get face coordinates dynamically
-        x_ratio, y_ratio = get_focal_point_ratios(video_path, start, end)
+        dynamic_ratios = None
+        if layout_mode == "vlog":
+            dynamic_ratios = get_dynamic_focal_ratios(video_path, start, end, chunk_size=1.0)
+            x_ratio, y_ratio = 0.5, 0.5
+        else:
+            x_ratio, y_ratio = get_focal_point_ratios(video_path, start, end)
 
         rendered_path = render_clip(
             video_path, start, end, out_path, 
             transcript_json_path=transcript_json_path,
             x_ratio=x_ratio, y_ratio=y_ratio,
-            layout_mode=layout_mode
+            layout_mode=layout_mode,
+            quality=quality,
+            dynamic_ratios=dynamic_ratios,
+            caption_color=caption_color,
+            caption_animation=caption_animation
         )
         
         rendered_clips.append({
