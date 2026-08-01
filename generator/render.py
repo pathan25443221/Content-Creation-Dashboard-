@@ -4,10 +4,9 @@ import json
 import argparse
 import subprocess
 
-def generate_srt_subtitles(transcript_json_path: str, start: float, end: float, srt_out_path: str, animation: str = "none") -> bool:
+def generate_ass_subtitles(transcript_json_path: str, start: float, end: float, ass_out_path: str, animation: str = "none", color: str = "&H00FFFFFF") -> bool:
     """
-    Generates an SRT file for the specific clip window.
-    If animation is 'pop' or 'fade', injects ASS override tags.
+    Generates an ASS file for the specific clip window to support advanced TikTok animations like pop and fade.
     """
     if not transcript_json_path or not os.path.exists(transcript_json_path):
         return False
@@ -36,31 +35,49 @@ def generate_srt_subtitles(transcript_json_path: str, start: float, end: float, 
             return False
 
         def format_timestamp(seconds: float) -> str:
-            millis = int((seconds % 1) * 1000)
+            # ASS format: H:MM:SS.cs (cs = centiseconds 0-99)
+            cs = int((seconds % 1) * 100)
             secs = int(seconds)
             mins = secs // 60
             hours = mins // 60
             mins = mins % 60
             secs = secs % 60
-            return f"{hours:02d}:{mins:02d}:{secs:02d},{millis:03d}"
+            return f"{hours}:{mins:02d}:{secs:02d}.{cs:02d}"
 
-        with open(srt_out_path, "w", encoding="utf-8") as f:
-            for idx, seg in enumerate(clip_segments, start=1):
-                f.write(f"{idx}\n")
-                f.write(f"{format_timestamp(seg['start'])} --> {format_timestamp(seg['end'])}\n")
+        # ASS Header
+        ass_header = f"""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,65,{color},&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,6,0,2,10,10,120,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+        with open(ass_out_path, "w", encoding="utf-8") as f:
+            f.write(ass_header)
+            for seg in clip_segments:
+                start_ts = format_timestamp(seg['start'])
+                end_ts = format_timestamp(seg['end'])
+                text = seg['text'].replace('\n', '\\N')
                 
-                text = seg['text']
                 # Inject ASS tags if animation is requested
                 if animation == "pop":
-                    text = f"{{\\fscx50\\fscy50\\t(0,150,\\fscx100\\fscy100)}}{text}"
+                    # TikTok pop: starts at 50% scale, quickly pops to 110%, then settles to 100%
+                    # Actually, a simple 50% to 100% over 100ms works well
+                    text = f"{{\\fscx50\\fscy50\\t(0,100,\\fscx100\\fscy100)}}{text}"
                 elif animation == "fade":
-                    text = f"{{\\fad(200,0)}}{text}"
+                    text = f"{{\\fad(200,200)}}{text}"
                     
-                f.write(f"{text}\n\n")
+                f.write(f"Dialogue: 0,{start_ts},{end_ts},Default,,0,0,0,,{text}\n")
 
         return True
     except Exception as e:
-        print(f"[Warning] Failed to generate SRT subtitles: {e}", file=sys.stderr)
+        print(f"[Warning] Failed to generate ASS subtitles: {e}", file=sys.stderr)
         return False
 
 def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None, x_ratio: float = 0.5, y_ratio: float = 0.5, layout_mode: str = "visual_split", quality: str = "high", dynamic_ratios: list = None, caption_color: str = "white", caption_animation: str = "none") -> str:
@@ -109,22 +126,22 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
 
     # Burn captions if transcript is present
     if transcript_json_path:
-        srt_path = output_path.replace(".mp4", ".srt")
-        has_srt = generate_srt_subtitles(transcript_json_path, start, end, srt_path, animation=caption_animation)
-        if has_srt:
-            escaped_srt = srt_path.replace("\\", "/").replace(":", "\\:")
-            
-            # Map color string to ASS hex BGR
-            color_map = {
-                "white": "&H00FFFFFF",
-                "yellow": "&H0000FFFF",
-                "green": "&H0000FF00",
-                "cyan": "&H00FFFF00"
-            }
-            ass_color = color_map.get(caption_color, "&H00FFFFFF")
-            
-            # Overlay subtitles on the [stacked] stream
-            filter_complex += f",[stacked]subtitles='{escaped_srt}':force_style='Fontname=Arial,Fontsize=18,PrimaryColour={ass_color},OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2'[outv]"
+        # Map color string to ASS hex BGR
+        color_map = {
+            "white": "&H00FFFFFF",
+            "yellow": "&H0000FFFF",
+            "green": "&H0000FF00",
+            "cyan": "&H00FFFF00"
+        }
+        ass_color = color_map.get(caption_color, "&H00FFFFFF")
+        
+        ass_path = output_path.replace(".mp4", ".ass")
+        has_ass = generate_ass_subtitles(transcript_json_path, start, end, ass_path, animation=caption_animation, color=ass_color)
+        if has_ass:
+            escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
+            # Overlay ASS subtitles on the [stacked] stream
+            # No force_style needed because the style is fully defined in the ASS header
+            filter_complex += f",[stacked]subtitles='{escaped_ass}'[outv]"
         else:
             filter_complex += ";[stacked]copy[outv]"
     else:
