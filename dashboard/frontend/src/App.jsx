@@ -142,12 +142,17 @@ export default function App() {
     }
   };
 
-  const handleApprove = async (clipId, customTitle) => {
+  const handleApprove = async (clipId, customTitle, customDescription, customHashtags) => {
     try {
       const res = await fetch(`/api/clips/${clipId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: customTitle, platforms: ['youtube', 'instagram'] })
+        body: JSON.stringify({ 
+          title: customTitle, 
+          description: customDescription,
+          hashtags: customHashtags,
+          platforms: ['youtube', 'instagram'] 
+        })
       });
       if (res.ok) {
         fetchClips('pending');

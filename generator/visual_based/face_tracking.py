@@ -55,7 +55,7 @@ def get_focal_point_ratios(video_path: str, start: float, end: float) -> tuple:
             # Calculate center
             center_x = x + w / 2.0
             center_y = y + h / 2.0
-            faces_centers.append((center_x, center_y))
+            faces_centers.append((center_x, center_y, w, h))
 
         # Skip frames
         for _ in range(frames_to_skip - 1):
@@ -68,13 +68,15 @@ def get_focal_point_ratios(video_path: str, start: float, end: float) -> tuple:
     cap.release()
 
     if not faces_centers:
-        return (0.5, 0.5)
+        return (0.5, 0.5, 0.0, 0.0)
 
-    # Average the centers
-    avg_x = sum(cx for cx, cy in faces_centers) / len(faces_centers)
-    avg_y = sum(cy for cx, cy in faces_centers) / len(faces_centers)
+    # Average the centers and dimensions
+    avg_x = sum(f[0] for f in faces_centers) / len(faces_centers)
+    avg_y = sum(f[1] for f in faces_centers) / len(faces_centers)
+    avg_w = sum(f[2] for f in faces_centers) / len(faces_centers)
+    avg_h = sum(f[3] for f in faces_centers) / len(faces_centers)
 
-    return (avg_x / width, avg_y / height)
+    return (avg_x / width, avg_y / height, avg_w / width, avg_h / height)
 
 def get_dynamic_focal_ratios(video_path: str, start: float, end: float, chunk_size: float = 1.0) -> list:
     """
@@ -110,7 +112,6 @@ def get_dynamic_focal_ratios(video_path: str, start: float, end: float, chunk_si
         
         cap.set(cv2.CAP_PROP_POS_MSEC, current_chunk_start * 1000)
         
-        # Sample rate inside chunk
         sample_rate_sec = 0.5
         frames_to_skip = int(fps * sample_rate_sec)
         
@@ -123,7 +124,8 @@ def get_dynamic_focal_ratios(video_path: str, start: float, end: float, chunk_si
                 break
                 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            # Use lower minNeighbors to be more aggressive in finding faces if they are partially obscured
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=3, minSize=(20, 20))
             
             if len(faces) > 0:
                 largest_face = max(faces, key=lambda rect: rect[2] * rect[3])
@@ -145,7 +147,7 @@ def get_dynamic_focal_ratios(video_path: str, start: float, end: float, chunk_si
             x_r = avg_x / width
             y_r = avg_y / height
         else:
-            x_r, y_r = 0.5, 0.5
+            x_r, y_r = None, None
             
         results.append({
             "start": current_chunk_start,
@@ -157,6 +159,22 @@ def get_dynamic_focal_ratios(video_path: str, start: float, end: float, chunk_si
         current_chunk_start = current_chunk_end
 
     cap.release()
+
+    # Pass 2: Interpolate missing face detections
+    # Find the first known good face
+    known_x, known_y = 0.5, 0.85 # Global fallback: bottom-center instead of center-center to avoid duplication
+    for r in results:
+        if r["x_ratio"] is not None:
+            known_x, known_y = r["x_ratio"], r["y_ratio"]
+            break
+            
+    # Forward pass interpolation
+    for r in results:
+        if r["x_ratio"] is None:
+            r["x_ratio"], r["y_ratio"] = known_x, known_y
+        else:
+            known_x, known_y = r["x_ratio"], r["y_ratio"]
+
     return results
 
 if __name__ == "__main__":

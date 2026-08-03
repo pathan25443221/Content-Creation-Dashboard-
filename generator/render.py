@@ -80,7 +80,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         print(f"[Warning] Failed to generate ASS subtitles: {e}", file=sys.stderr)
         return False
 
-def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None, x_ratio: float = 0.5, y_ratio: float = 0.5, layout_mode: str = "visual_split", quality: str = "high", dynamic_ratios: list = None, caption_color: str = "white", caption_animation: str = "none") -> str:
+def render_clip(video_path: str, start: float, end: float, output_path: str, transcript_json_path: str = None, x_ratio: float = 0.5, y_ratio: float = 0.5, w_ratio: float = 0.0, h_ratio: float = 0.0, layout_mode: str = "visual_split", quality: str = "high", dynamic_ratios: list = None, caption_color: str = "white", caption_animation: str = "none") -> str:
     """
     Renders a vertical 9:16 clip from raw video between start and end timestamps using ffmpeg.
     If layout_mode is visual_split, uses a split-screen layout (gameplay top, face bottom).
@@ -105,24 +105,86 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
         concat_inputs = "".join([f"[v{i}]" for i in range(len(dynamic_ratios))])
         filter_complex += f"{concat_inputs}concat=n={len(dynamic_ratios)}:v=1:a=0[stacked]"
 
+    elif layout_mode == "visual_split" and dynamic_ratios:
+        # Split screen with dynamic tracking for the bottom screen
+        filter_complex = ""
+        for i, chunk in enumerate(dynamic_ratios):
+            c_start = max(0, chunk["start"] - start)
+            c_end = min(duration, chunk["end"] - start)
+            
+            # Top crop (static center for gameplay)
+            top_crop = f"crop=ih*(9/16):ih/2:(iw-ih*(9/16))/2:(ih-ih/2)/2"
+            
+            # Bottom crop (dynamic Face Cam)
+            fx = f"max(0\\,min(iw-ih*(9/16)\\,iw*{chunk['x_ratio']}-ih*(9/16)/2))"
+            fy = f"max(0\\,min(ih-ih/2\\,ih*{chunk['y_ratio']}-ih/4))"
+            bottom_crop = f"crop=ih*(9/16):ih/2:{fx}:{fy}"
+            
+            filter_complex += f"[0:v]trim=start={c_start}:end={c_end},setpts=PTS-STARTPTS,split=2[top_src{i}][bot_src{i}];"
+            filter_complex += f"[top_src{i}]{top_crop}[top{i}];"
+            filter_complex += f"[bot_src{i}]{bottom_crop}[bot{i}];"
+            filter_complex += f"[top{i}][bot{i}]vstack=inputs=2[v{i}];"
+            
+        # Concat all the chunks
+        concat_inputs = "".join([f"[v{i}]" for i in range(len(dynamic_ratios))])
+        filter_complex += f"{concat_inputs}concat=n={len(dynamic_ratios)}:v=1:a=0[stacked]"
+
     elif layout_mode == "visual_split":
-        # Split screen complex filter
-        # Top crop (Gameplay - center of original video)
-        top_crop = "crop=ih*(9/16):ih/2:(iw-ih*(9/16))/2:(ih-ih/2)/2"
+        # Static split screen fallback (Top is 65%, Bottom is 35%)
+        top_crop = "crop=ih*(9/16):ih*0.65:(iw-ih*(9/16))/2:(ih-ih*0.65)/2"
         
-        # Bottom crop (Face Cam)
-        # FFmpeg requires commas inside functions to be escaped with \
-        face_x = f"max(0\\,min(iw-ih*(9/16)\\,iw*{x_ratio}-ih*(9/16)/2))"
-        face_y = f"max(0\\,min(ih-ih/2\\,ih*{y_ratio}-ih/4))"
-        bottom_crop = f"crop=ih*(9/16):ih/2:{face_x}:{face_y}"
+        w_ratio = locals().get("w_ratio", 0)
+        h_ratio = locals().get("h_ratio", 0)
         
-        # Combine using vstack
-        filter_complex = f"[0:v]{top_crop}[top];[0:v]{bottom_crop}[bottom];[top][bottom]vstack=inputs=2[stacked]"
+        # Bottom aspect ratio = (9/16) / 0.35 = 1.60714
+        bot_aspect = (9/16) / 0.35
+        
+        if w_ratio > 0 and h_ratio > 0:
+            # To keep the person PERFECTLY centered, the crop must not hit the video edges.
+            max_crop_w = f"(2*min({x_ratio}\\, 1.0-{x_ratio})*iw)"
+            max_crop_h = f"(2*min({y_ratio}\\, 1.0-{y_ratio})*ih)"
+            
+            # Convert max_crop_w to an equivalent height limit based on the aspect ratio
+            max_h_from_w = f"({max_crop_w}/{bot_aspect})"
+            
+            # The absolute maximum crop_h that won't hit any edges
+            max_allowed_h = f"min({max_crop_h}\\, {max_h_from_w})"
+            
+            # The target crop height is 4x the face height for a comfortable safe distance
+            target_crop_h = f"(ih*min(1.0\\, max(0.2\\, {h_ratio}*4.0)))"
+            
+            # The absolute minimum crop height so we don't cut off the face itself
+            min_allowed_h = f"(ih*{h_ratio}*1.5)"
+            
+            # Final crop height: bounded by max_allowed_h, but safely above min_allowed_h
+            crop_h = f"max({min_allowed_h}\\, min({target_crop_h}\\, {max_allowed_h}))"
+            
+            # We explicitly set crop_w based on crop_h to guarantee the exact same aspect ratio,
+            # preventing scale2ref from squishing the image!
+            crop_w = f"({crop_h}*{bot_aspect})"
+        else:
+            crop_w = "ih*(9/16)"
+            crop_h = "ih*0.35"
+            
+        face_x = f"max(0\\,min(iw-{crop_w}\\,iw*{x_ratio}-{crop_w}/2))"
+        face_y = f"max(0\\,min(ih-{crop_h}\\,ih*{y_ratio}-{crop_h}/2))"
+        bottom_crop = f"crop={crop_w}:{crop_h}:{face_x}:{face_y}"
+        
+        filter_complex = (
+            f"[0:v]{top_crop}[top];"
+            f"[0:v]{bottom_crop}[bot_raw];"
+            # scale bot_raw to the same width as top, but adjust height to exactly 35/65 of the top's height
+            f"[bot_raw][top]scale2ref=w=iw:h=ih*(0.35/0.65)[bottom][top_ref];"
+            f"[top_ref][bottom]vstack=inputs=2[stacked]"
+        )
     else:
         # Standard 9:16 crop (Full height)
         # Tracks x_ratio, but full height (so y is always 0)
         face_x = f"max(0\\,min(iw-ih*(9/16)\\,iw*{x_ratio}-ih*(9/16)/2))"
         filter_complex = f"[0:v]crop=ih*(9/16):ih:{face_x}:0[stacked]"
+
+    # Scale to 1080x1920 standard shorts resolution
+    filter_complex += ";[stacked]scale=1080:1920:flags=lanczos[scaled]"
 
     # Burn captions if transcript is present
     if transcript_json_path:
@@ -139,13 +201,13 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
         has_ass = generate_ass_subtitles(transcript_json_path, start, end, ass_path, animation=caption_animation, color=ass_color)
         if has_ass:
             escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
-            # Overlay ASS subtitles on the [stacked] stream
+            # Overlay ASS subtitles on the [scaled] stream
             # No force_style needed because the style is fully defined in the ASS header
-            filter_complex += f",[stacked]subtitles='{escaped_ass}'[outv]"
+            filter_complex += f";[scaled]subtitles='{escaped_ass}'[outv]"
         else:
-            filter_complex += ";[stacked]copy[outv]"
+            filter_complex += ";[scaled]copy[outv]"
     else:
-        filter_complex += ";[stacked]copy[outv]"
+        filter_complex += ";[scaled]copy[outv]"
 
     # Adjust encoding parameters based on requested quality
     preset = "medium"
@@ -217,13 +279,19 @@ def render_clips_from_list(video_path: str, clips: list, output_dir: str = "gene
         if layout_mode == "vlog":
             dynamic_ratios = get_dynamic_focal_ratios(video_path, start, end, chunk_size=1.0)
             x_ratio, y_ratio = 0.5, 0.5
+            w_ratio, h_ratio = 0.0, 0.0
         else:
-            x_ratio, y_ratio = get_focal_point_ratios(video_path, start, end)
+            focal_data = get_focal_point_ratios(video_path, start, end)
+            x_ratio = focal_data[0]
+            y_ratio = focal_data[1]
+            w_ratio = focal_data[2] if len(focal_data) > 2 else 0.0
+            h_ratio = focal_data[3] if len(focal_data) > 2 else 0.0
 
         rendered_path = render_clip(
             video_path, start, end, out_path, 
             transcript_json_path=transcript_json_path,
             x_ratio=x_ratio, y_ratio=y_ratio,
+            w_ratio=w_ratio, h_ratio=h_ratio,
             layout_mode=layout_mode,
             quality=quality,
             dynamic_ratios=dynamic_ratios,
@@ -237,6 +305,8 @@ def render_clips_from_list(video_path: str, clips: list, output_dir: str = "gene
             "end": end,
             "reason": reason,
             "title": title,
+            "description": clip.get("description", ""),
+            "hashtags": clip.get("hashtags", ""),
             "virality_score": clip.get("virality_score", round(9.5 - idx * 0.4, 1)),
             "file_path": rendered_path
         })

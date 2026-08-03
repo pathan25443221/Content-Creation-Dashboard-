@@ -23,10 +23,27 @@ def publish_to_youtube(clip_data) -> dict:
         from googleapiclient.discovery import build
         from googleapiclient.http import MediaFileUpload
         from google_auth_oauthlib.flow import InstalledAppFlow
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
         
         scopes = ["https://www.googleapis.com/auth/youtube.upload"]
-        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes)
-        creds = flow.run_local_server(port=0)
+        TOKEN_FILE = getattr(settings, 'YOUTUBE_OAUTH_TOKEN_FILE', 'publisher/credentials/youtube_token.json')
+        creds = None
+        
+        # The file token.json stores the user's access and refresh tokens
+        if os.path.exists(TOKEN_FILE):
+            creds = Credentials.from_authorized_user_file(TOKEN_FILE, scopes)
+            
+        # If there are no (valid) credentials available, let the user log in.
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, scopes)
+                creds = flow.run_local_server(port=0)
+            # Save the credentials for the next run
+            with open(TOKEN_FILE, 'w') as token:
+                token.write(creds.to_json())
 
         youtube = build("youtube", "v3", credentials=creds)
 

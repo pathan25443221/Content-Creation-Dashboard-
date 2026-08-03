@@ -36,3 +36,36 @@ def detect_visual_motion_scenes(video_path: str, threshold: float = 27.0) -> lis
     except Exception as e:
         print(f"[Warning] PySceneDetect failed ({e}). Returning empty motion list.")
         return []
+
+def compute_visual_energy(video_path: str, start: float, end: float) -> float:
+    """
+    Computes visual energy (scene cuts per second) for a specific clip window.
+    Extracts the window using ffmpeg and runs PySceneDetect.
+    """
+    import subprocess
+    import tempfile
+    import uuid
+    import os
+
+    try:
+        tmp_mp4 = os.path.join(tempfile.gettempdir(), f"temp_{uuid.uuid4().hex}.mp4")
+        # Extract low-res video chunk quickly using ffmpeg (no audio)
+        subprocess.run([
+            "ffmpeg", "-y", "-ss", str(start), "-i", video_path, 
+            "-t", str(end-start), "-an", "-s", "426x240", tmp_mp4
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        scenes = detect_visual_motion_scenes(tmp_mp4)
+        if os.path.exists(tmp_mp4):
+            os.remove(tmp_mp4)
+            
+        dur = end - start
+        if dur <= 0: return 0.0
+        
+        # visual energy is (number of scenes) / (duration in seconds)
+        # 1 cut per 5 seconds = 0.2 score. Let's scale it so it's a useful signal (0.0 to 1.0+)
+        cut_frequency = len(scenes) / dur
+        return float(cut_frequency * 10.0) # e.g. 0.2 cuts/sec -> 2.0 visual energy
+    except Exception as e:
+        print(f"[MotionDetect Error] Failed to compute visual energy for {start}-{end}: {e}")
+        return 0.0

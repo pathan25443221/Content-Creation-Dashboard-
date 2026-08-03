@@ -50,15 +50,25 @@ The **Content Creation Dashboard** is an autonomous, single-operator short-form 
 - [x] Enforce `format="json"` in Ollama clip selection (`select_clips.py`).
 - [x] Prevent mid-sentence video cuts via sentence-aligned timestamp boundaries.
 - [x] Burn centered subtitles directly onto rendered 9:16 vertical video clips via `ffmpeg`.
+- [x] Support advanced subtitle animations (TikTok Pop, Fade In) by dynamically rendering `.ass` files.
 - [x] Add embedded HTML5 video player in Review Queue (`App.jsx` + FastAPI `/api/media` static mount).
 - [x] Extract YouTube metadata & tags (`generator/download.py`) for dynamic genre-adaptive LLM hook prompting (`select_clips.py`).
 - [x] Fast-path pre-existing YouTube captions (`.vtt`/`.srt` in `transcribe.py`) to bypass Whisper CPU transcription.
-- [x] Automatic local disk cleanup of rejected `.mp4`/`.srt` files and raw source videos (`main.py` & `router.py`).
+- [x] Automatic local disk cleanup of rejected `.mp4`/`.ass` files and raw source videos (`main.py` & `router.py`).
 - [x] Vizard.ai style 2-column Review Queue cards with virality scores (`9.2 VIRALITY`), short titles, viral reason callout boxes, and timestamped spoken subtitle previews.
 - [x] Dynamic AI reasoning quoting exact spoken lines/concepts from transcript without generic template text.
 - [x] Guarantee 3 distinct 20–50 second candidate clips per video pipeline run.
-- [ ] Connect real YouTube & Instagram API credentials when available.
+- [x] Multimodal Scoring Engine: Combines LLM `hook_strength` with physical `librosa` Audio Energy and `PySceneDetect` Visual Pace.
+- [x] Dense context chunking for LLM prompt to prevent slicing jokes/stories during downsampling.
+- [ ] Connect real Instagram API credentials when available.
+- [x] Implement proper Google OAuth token caching for YouTube uploads to prevent repeated logins.
 - [x] Implement custom video cropping focal point (face/speaker tracking with split-screen layout).
+- [x] Implemented dynamic face tracking for the bottom face-cam in `visual_split` layout, replacing the static average crop.
+- [x] Completely modularized FastAPI backend into `routers/` and `services/` enforcing strict DRY principles.
+- [x] Implemented Hybrid Multimodal Clipping for `visual_split` (Audio Energy Spikes + Whisper Transcript boundary snapping).
+- [x] Added dynamic LLM enhancement for visual clip Titles & Descriptions based on video metadata and exact spoken transcript snippets.
+- [x] Built robust JSON dictionary extraction fallback for Ollama to handle varying LLM output payloads safely.
+- [x] Optimized `visual_split` render layout to 65% top (gameplay) and 35% bottom (facecam) for an improved widescreen-friendly aesthetic.
 
 ---
 

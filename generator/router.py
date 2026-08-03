@@ -52,12 +52,14 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
         if progress_callback: progress_callback("Transcribing audio (AI listening)...")
         transcript_json = transcribe_audio(raw_video_path, model_size="tiny", sub_path=sub_path)
         if progress_callback: progress_callback("AI is reading transcript to find the best viral hooks...")
-        candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model, metadata=metadata)
+        candidate_clips = select_speech_clips(transcript_json, model_name=ollama_model, metadata=metadata, raw_video_path=raw_video_path, quantity=quantity)
     elif video_type in ["visual", "visual_split"]:
-        print("[Router] Path: Visual-based content")
+        print("[Router] Path: Visual-based content (Multimodal)")
+        if progress_callback: progress_callback("Transcribing audio for multimodal analysis...")
+        transcript_json = transcribe_audio(raw_video_path, model_size="tiny", sub_path=sub_path)
         if progress_callback: progress_callback("Scanning video for action and motion spikes...")
         from generator.visual_based.select_clips import select_visual_clips
-        candidate_clips = select_visual_clips(raw_video_path)
+        candidate_clips = select_visual_clips(raw_video_path, target_count=quantity, metadata=metadata, transcript_json=transcript_json)
     else:
         raise ValueError(f"Unsupported video_type: {video_type}")
 
@@ -102,7 +104,9 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
                 end_time=c["end"],
                 reason=c["reason"],
                 file_path=c["file_path"],
-                title=c["title"],
+                title=c.get("title", f"Highlight #{int(c['start'])}"),
+                description=c.get("description"),
+                hashtags=c.get("hashtags"),
                 virality_score=c.get("virality_score", 8.5),
                 status="pending"
             )

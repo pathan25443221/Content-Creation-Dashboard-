@@ -45,8 +45,8 @@ def detect_audio_energy_spikes(video_path: str, top_n: int = 5, min_clip_duratio
         if len(selected_ranges) >= top_n:
             break
 
-        start = max(0.0, peak_time - 10.0)
-        end = min(total_duration, peak_time + 15.0)
+        start = max(0.0, peak_time - 15.0)
+        end = min(total_duration, peak_time + 25.0)
 
         # Check overlap
         overlap = False
@@ -65,3 +65,34 @@ def detect_audio_energy_spikes(video_path: str, top_n: int = 5, min_clip_duratio
 
     print(f"[AudioEnergy] Identified {len(selected_ranges)} audio energy spike windows.")
     return selected_ranges
+
+def compute_audio_energy(video_path: str, start: float, end: float) -> float:
+    """
+    Computes the average RMS audio energy of a specific video clip window.
+    Uses ffmpeg to rapidly extract the specific window to a temporary wav file.
+    """
+    import subprocess
+    import tempfile
+    import uuid
+    import os
+
+    try:
+        tmp_wav = os.path.join(tempfile.gettempdir(), f"temp_{uuid.uuid4().hex}.wav")
+        # Extract audio chunk quickly using ffmpeg
+        subprocess.run([
+            "ffmpeg", "-y", "-ss", str(start), "-i", video_path, 
+            "-t", str(end-start), "-vn", "-ac", "1", "-ar", "22050", tmp_wav
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        y, sr = librosa.load(tmp_wav, sr=22050, mono=True)
+        if os.path.exists(tmp_wav):
+            os.remove(tmp_wav)
+            
+        if len(y) == 0:
+            return 0.0
+            
+        rms = librosa.feature.rms(y=y)[0]
+        return float(np.mean(rms))
+    except Exception as e:
+        print(f"[AudioEnergy Error] Failed to compute energy for {start}-{end}: {e}")
+        return 0.0

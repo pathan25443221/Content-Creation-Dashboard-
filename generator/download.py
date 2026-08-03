@@ -27,7 +27,7 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
 
     ydl_opts = {
         'format': format_str,
-        'merge_output_format': 'mp4',
+        'merge_output_format': 'mkv',
         'outtmpl': out_template,
         'writesubtitles': True,
         'writeautomaticsub': True,
@@ -37,7 +37,7 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
         'ignoreerrors': True,
         'quiet': False,
         'no_warnings': True,
-        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+        'extractor_args': {'youtube': {'player_client': ['web', 'ios', 'android']}}
     }
     
     print(f"[Generator] Downloading video & metadata from {url}...")
