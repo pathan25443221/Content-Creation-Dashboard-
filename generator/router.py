@@ -24,6 +24,9 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
     4. Render 9:16 vertical mp4 shorts.
     5. Record video and clips in the SQLite database.
     """
+    # Strip surrounding quotes (common when using "Copy as path" in Windows)
+    video_input = video_input.strip('"\' ')
+    
     print(f"[Router] Starting generation pipeline for: {video_input} (type={video_type}, burn_captions={burn_captions}, quantity={quantity}, quality={quality})")
     
     # 1. Download or locate video file
@@ -106,7 +109,7 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
                 file_path=c["file_path"],
                 title=c.get("title", f"Highlight #{int(c['start'])}"),
                 description=c.get("description"),
-                hashtags=c.get("hashtags"),
+                hashtags=", ".join(c.get("hashtags", [])) if isinstance(c.get("hashtags"), list) else c.get("hashtags"),
                 virality_score=c.get("virality_score", 8.5),
                 status="pending"
             )

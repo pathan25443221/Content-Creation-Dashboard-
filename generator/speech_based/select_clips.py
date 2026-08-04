@@ -209,7 +209,24 @@ TAGS: {tags_str}
 TRANSCRIPT SEGMENTS:
 {segments_text}
 
-Task: Pick {quantity} top potential viral short clips. Return JSON format only."""
+Task: Pick {quantity} top potential viral short clips from the transcript above. 
+CRITICAL: You MUST return a JSON array containing EXACTLY {quantity} objects. 
+EACH object MUST contain the exact following keys: "start", "end", "title", "description", "reason", "hashtags", "hook_strength_score".
+Do NOT return a dictionary of clips, you MUST return a JSON array of objects with the start and end timestamps from the transcript.
+
+Example format:
+[
+  {{
+    "start": 15.0,
+    "end": 42.5,
+    "hook_strength_score": 9.3,
+    "reason": "Hooks viewers instantly...",
+    "title": "Why Startups Fail",
+    "description": "Ever wonder why most startups fail? Here is the answer.",
+    "hashtags": "#startups #business"
+  }}
+]
+"""
 
     print(f"[SelectClips] Prompting Ollama model ('{model_name}')...")
     try:

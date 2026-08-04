@@ -18,18 +18,20 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
 
     # Priority 1: High audio energy spike
     if audio_spikes:
+        base_title = metadata.get("title", "Action Highlight").replace(".mp4", "") if metadata else "Action Highlight"
         for idx, spike in enumerate(audio_spikes[:target_count], start=1):
             candidates.append({
                 "start": spike["start"],
                 "end": spike["end"],
                 "reason": f"Audio energy volume spike (crowd/impact) detected around {spike['peak_time']}s.",
-                "title": f"Action Highlight {idx}",
+                "title": f"{base_title} - Part {idx}",
                 "description": f"Epic action and hype moment! You don't want to miss this.",
                 "hashtags": "#action #hype #gaming #shorts"
             })
     
     # Priority 2: High motion scene if audio energy yielded fewer than target_count
     if len(candidates) < target_count and scenes:
+        base_title = metadata.get("title", "Scene Highlight").replace(".mp4", "") if metadata else "Scene Highlight"
         for idx, scene in enumerate(scenes, start=1):
             if len(candidates) >= target_count:
                 break
@@ -44,7 +46,7 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
                         "start": scene["start"],
                         "end": max(scene["end"], scene["start"] + 40.0),
                         "reason": f"Visual motion & scene cut sequence ({scene['duration']}s duration).",
-                        "title": f"Scene Highlight {len(candidates) + 1}",
+                        "title": f"{base_title} - Part {len(candidates) + 1}",
                         "description": f"Awesome visual sequence. Check out this highlight!",
                         "hashtags": "#highlight #visuals #gaming"
                     })
@@ -52,13 +54,14 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
     # Priority 3: Fallback uniform windowing if no spikes/scenes detected
     if not candidates:
         print("[VisualSelect] No distinct spikes detected. Using fallback windowing...")
+        base_title = metadata.get("title", "Visual Highlight").replace(".mp4", "") if metadata else "Visual Highlight"
         for i in range(target_count):
             start = 10.0 + (i * 35.0)
             candidates.append({
                 "start": start,
                 "end": start + 40.0,
                 "reason": f"Visual highlight segment {start}s-{start+40.0}s.",
-                "title": f"Visual Highlight {i+1}",
+                "title": f"{base_title} - Part {i+1}",
                 "description": f"Amazing visual highlight clip! Enjoy the action.",
                 "hashtags": "#highlight #shorts #action"
             })

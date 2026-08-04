@@ -39,3 +39,8 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Sensitive Cookies & Temp Files
+cookies.txt
+*cookies*.txt
+ai_test.json

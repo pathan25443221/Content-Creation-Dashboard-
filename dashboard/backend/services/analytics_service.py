@@ -13,12 +13,19 @@ def get_overview_stats(session: Session) -> dict:
         select(func.count(Post.id)).where(Post.posted_at >= seven_days_ago)
     ).one()
 
-    metrics_sum = session.exec(
-        select(func.sum(Metric.views), func.sum(Metric.likes))
-    ).one()
-
-    total_views = metrics_sum[0] or 0
-    total_likes = metrics_sum[1] or 0
+    posts = session.exec(select(Post)).all()
+    total_views = 0
+    total_likes = 0
+    total_comments = 0
+    
+    for p in posts:
+        latest_metric = session.exec(
+            select(Metric).where(Metric.post_id == p.id).order_by(Metric.fetched_at.desc())
+        ).first()
+        if latest_metric:
+            total_views += latest_metric.views
+            total_likes += latest_metric.likes
+            total_comments += latest_metric.comments
 
     recent_clips = session.exec(
         select(Clip).order_by(Clip.created_at.desc()).limit(5)
@@ -30,6 +37,7 @@ def get_overview_stats(session: Session) -> dict:
         "recent_posts_count": recent_posts_count,
         "total_views": total_views,
         "total_likes": total_likes,
+        "total_comments": total_comments,
         "recent_activity": [
             {
                 "id": c.id,

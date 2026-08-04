@@ -100,7 +100,7 @@ export default function App() {
   useEffect(() => {
     fetchOverview();
     if (activeTab === 'review') fetchClips('pending');
-    if (activeTab === 'posts') fetchPosts();
+    if (activeTab === 'posts' || activeTab === 'analytics') fetchPosts();
     if (activeTab === 'clips') fetchClips();
   }, [activeTab, refreshTrigger]);
 
@@ -142,7 +142,11 @@ export default function App() {
     }
   };
 
-  const handleApprove = async (clipId, customTitle, customDescription, customHashtags) => {
+  const handleApprove = async (clipId, customTitle, customDescription, customHashtags, platforms) => {
+    if (!platforms || platforms.length === 0) {
+      alert("Please select at least one platform to publish to.");
+      return;
+    }
     try {
       const res = await fetch(`/api/clips/${clipId}/approve`, {
         method: 'POST',
@@ -151,7 +155,7 @@ export default function App() {
           title: customTitle, 
           description: customDescription,
           hashtags: customHashtags,
-          platforms: ['youtube', 'instagram'] 
+          platforms: platforms 
         })
       });
       if (res.ok) {
@@ -220,7 +224,7 @@ export default function App() {
         )}
 
         {activeTab === 'analytics' && (
-          <AnalyticsTab overview={overview} fetchOverview={fetchOverview} />
+          <AnalyticsTab overview={overview} fetchOverview={fetchOverview} posts={posts} fetchPosts={fetchPosts} />
         )}
       </main>
     </div>

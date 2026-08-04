@@ -26,10 +26,21 @@ def poll_all_post_metrics():
             if not post.platform_post_id:
                 continue
 
+            # Get the previous metric snapshot to simulate incremental growth in mocks
+            previous = session.exec(
+                select(Metric).where(Metric.post_id == post.id).order_by(Metric.fetched_at.desc())
+            ).first()
+            
+            prev_data = {
+                "views": previous.views if previous else 0,
+                "likes": previous.likes if previous else 0,
+                "comments": previous.comments if previous else 0
+            }
+
             if post.platform == "youtube":
-                stats = fetch_youtube_stats(post.platform_post_id)
+                stats = fetch_youtube_stats(post.platform_post_id, prev_data)
             elif post.platform == "instagram":
-                stats = fetch_instagram_insights(post.platform_post_id)
+                stats = fetch_instagram_insights(post.platform_post_id, prev_data)
             else:
                 continue
 

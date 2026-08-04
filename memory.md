@@ -69,6 +69,12 @@ The **Content Creation Dashboard** is an autonomous, single-operator short-form 
 - [x] Added dynamic LLM enhancement for visual clip Titles & Descriptions based on video metadata and exact spoken transcript snippets.
 - [x] Built robust JSON dictionary extraction fallback for Ollama to handle varying LLM output payloads safely.
 - [x] Optimized `visual_split` render layout to 65% top (gameplay) and 35% bottom (facecam) for an improved widescreen-friendly aesthetic.
+- [x] Implemented robust UI local file bypass parsing in `download.py` to accept Windows "Copy as path" paths directly.
+- [x] Fixed PySceneDetect FFmpeg proxy generation crash by downgrading strict `-hwaccel cuda` to `auto`, massively accelerating analysis times.
+- [x] Redesigned Review Queue UI to dynamically inject hashtags directly into the video Title instead of a separate input field.
+- [x] Enhanced visual clip fallback logic to use original video filenames instead of generic titles when local AI JSON generation fails or times out.
+- [x] Fixed `sqlite3.ProgrammingError` by properly casting generated hashtag lists to comma-separated strings before SQL insertion.
+- [x] Triggered foreground local server login flow to cache fresh YouTube OAuth tokens with full `youtube.readonly` scopes, fixing Analytics 403 errors.
 
 ---
 

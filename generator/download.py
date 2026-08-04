@@ -9,7 +9,7 @@ import yt_dlp
 
 def download_video(url: str, output_dir: str = "generator/raw", quality: str = "high") -> dict:
     """
-    Downloads a video from a given URL using yt-dlp native Python API.
+    Downloads a video from a given URL using yt-dlp native Python API, OR accepts a local file path.
     Extracts video metadata (title, tags, category) and downloads YouTube subtitles if available.
     Returns dict containing video_path, sub_path (if any), and metadata.
     """
@@ -17,17 +17,43 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
     
     unique_prefix = f"vid_{uuid.uuid4().hex[:8]}"
     out_template = os.path.join(output_dir, f"{unique_prefix}.%(ext)s")
+
+    # Strip surrounding quotes (common when using "Copy as path" in Windows)
+    clean_url = url.strip('"\' ')
+
+    # [LOCAL FILE BYPASS] - If the 'url' is actually a local file on the computer, skip downloading!
+    if os.path.exists(clean_url) and os.path.isfile(clean_url):
+        print(f"[Generator] Using LOCAL FILE bypass for: {clean_url}")
+        import shutil
+        ext = os.path.splitext(clean_url)[1] or ".mp4"
+        local_video_path = os.path.join(output_dir, f"{unique_prefix}{ext}")
+        shutil.copy2(clean_url, local_video_path)
+        
+        return {
+            "video_path": local_video_path,
+            "sub_path": None,
+            "metadata": {
+                "title": os.path.basename(clean_url),
+                "tags": ["Local", "Video"],
+                "category": "Local File"
+            }
+        }
     
-    # Select download format based on requested quality to save bandwidth
-    format_str = 'bestvideo+bestaudio/best'
+    # Select download format based on requested quality to save bandwidth.
+    # We remove the H.264 restriction so it can grab 4K (AV1/VP9) streams if available.
+    format_str = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
     if quality == "medium":
-        format_str = 'bestvideo[height<=1080]+bestaudio/best'
+        format_str = 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4][height<=1080]/best'
     elif quality == "low":
-        format_str = 'bestvideo[height<=720]+bestaudio/best'
+        format_str = 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best'
+
+    import shutil
+    # Hardcode path because Uvicorn process might not have ffmpeg in PATH
+    ffmpeg_path = r"C:\ffmpeg-8.0-essentials_build\bin\ffmpeg.exe"
 
     ydl_opts = {
         'format': format_str,
-        'merge_output_format': 'mkv',
+        'merge_output_format': 'mp4',
         'outtmpl': out_template,
         'writesubtitles': True,
         'writeautomaticsub': True,
@@ -37,10 +63,14 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
         'ignoreerrors': True,
         'quiet': False,
         'no_warnings': True,
-        'extractor_args': {'youtube': {'player_client': ['web', 'ios', 'android']}}
+        'ffmpeg_location': ffmpeg_path
     }
     
-    print(f"[Generator] Downloading video & metadata from {url}...")
+    # If the user provided a cookies.txt file (exported from Zen browser), use it
+    if os.path.exists("cookies.txt"):
+        ydl_opts['cookiefile'] = "cookies.txt"
+    
+    print(f"[Generator] Downloading video & metadata from {url}... (ffmpeg={ffmpeg_path})")
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
@@ -94,7 +124,8 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
         print(f"[Generator] Download completed: {video_path}")
         if sub_path:
             print(f"[Generator] Subtitles downloaded: {sub_path}")
-        print(f"[Generator] Metadata extracted: Title='{metadata['title']}', Tags={metadata['tags'][:5]}")
+        safe_title = metadata['title'].encode('ascii', 'ignore').decode()
+        print(f"[Generator] Metadata extracted: Title='{safe_title}', Tags={metadata['tags'][:5]}")
 
         return {
             "video_path": video_path,

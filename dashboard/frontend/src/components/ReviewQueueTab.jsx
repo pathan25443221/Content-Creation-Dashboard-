@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 
 function ReviewCard({ clip, idx, handleApprove, handleReject }) {
-  const [title, setTitle] = useState(clip.title || '');
+  const initialTitle = clip.title ? (clip.hashtags ? `${clip.title} ${clip.hashtags}` : clip.title) : '';
+  const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(clip.description || '');
-  const [hashtags, setHashtags] = useState(clip.hashtags || '');
+
+  const [publishToYT, setPublishToYT] = useState(true);
+  const [publishToIG, setPublishToIG] = useState(true);
 
   return (
     <div className="vizard-card glass-panel">
@@ -47,7 +50,12 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
           <div className="vizard-action-group">
             <button 
               className="vizard-btn-publish" 
-              onClick={() => handleApprove(clip.id, title, description, hashtags)}
+              onClick={() => {
+                const platforms = [];
+                if (publishToYT) platforms.push('youtube');
+                if (publishToIG) platforms.push('instagram');
+                handleApprove(clip.id, title, description, '', platforms);
+              }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
               Publish
@@ -74,20 +82,18 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
               placeholder="YouTube / Instagram Description..."
             />
           </div>
-          <div>
-            <div className="vizard-reason-label" style={{ marginBottom: '4px' }}>Hashtags</div>
-            <input 
-              type="text"
-              value={hashtags}
-              onChange={(e) => setHashtags(e.target.value)}
-              className="form-input"
-              style={{ width: '100%' }}
-              placeholder="#shorts #gaming"
-            />
-          </div>
           <div style={{ marginTop: '5px' }}>
-            <div className="vizard-reason-label" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Reason Selected</div>
-            <div className="vizard-reason-text" style={{ fontSize: '0.8rem' }}>{clip.reason}</div>
+            <div className="vizard-reason-label" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Platforms</div>
+            <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: '#0f172a', fontWeight: '600' }}>
+                <input type="checkbox" checked={publishToYT} onChange={(e) => setPublishToYT(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)' }} />
+                YouTube Shorts
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: '#0f172a', fontWeight: '600' }}>
+                <input type="checkbox" checked={publishToIG} onChange={(e) => setPublishToIG(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-purple)' }} />
+                Instagram Reels
+              </label>
+            </div>
           </div>
         </div>
 

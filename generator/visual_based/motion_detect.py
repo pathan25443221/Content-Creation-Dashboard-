@@ -12,8 +12,39 @@ def detect_visual_motion_scenes(video_path: str, threshold: float = 27.0) -> lis
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
     print(f"[MotionDetect] Running PySceneDetect on: {video_path}...")
+    import subprocess
+    import tempfile
+    import uuid
+    import cv2
+    
+    # Disable OpenCV OpenCL which sometimes defaults to Intel Integrated GPU and pegs it to 100%
+    cv2.ocl.setUseOpenCL(False)
+
+    # Downscale the video to 426x240 for blazingly fast scene detection
+    tmp_mp4 = os.path.join(tempfile.gettempdir(), f"temp_scene_{uuid.uuid4().hex}.mp4")
+    
     try:
-        video = open_video(video_path)
+        # Hardcode ffmpeg path to bypass PATH issues
+        ffmpeg_path = r"C:\ffmpeg-8.0-essentials_build\bin\ffmpeg.exe"
+        print(f"[MotionDetect] Downscaling video to 240p for faster PySceneDetect analysis using NVIDIA CUDA...")
+        # Run ffmpeg to downscale to 240p. We use auto hwaccel to prevent crashes if CUDA isn't strictly compatible with the input codec.
+        subprocess.run([
+            ffmpeg_path, "-y", 
+            "-hwaccel", "auto", # 'auto' will use CUDA/DXVA2 if available, otherwise CPU, preventing exit status 69
+            "-i", video_path, 
+            "-an", # No audio needed for visual scene detection
+            "-vf", "scale=426:240", # Standard FFmpeg scale filter
+            "-preset", "ultrafast",
+            tmp_mp4
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        
+        target_video = tmp_mp4
+    except Exception as e:
+        print(f"[Warning] FFmpeg downscale failed ({e}). Falling back to raw video path.")
+        target_video = video_path
+
+    try:
+        video = open_video(target_video)
         scene_manager = SceneManager()
         scene_manager.add_detector(ContentDetector(threshold=threshold))
 
@@ -32,10 +63,17 @@ def detect_visual_motion_scenes(video_path: str, threshold: float = 27.0) -> lis
             })
 
         print(f"[MotionDetect] Detected {len(results)} visual scenes.")
-        return results
     except Exception as e:
         print(f"[Warning] PySceneDetect failed ({e}). Returning empty motion list.")
-        return []
+        results = []
+        
+    if os.path.exists(tmp_mp4):
+        try:
+            os.remove(tmp_mp4)
+        except:
+            pass
+            
+    return results
 
 def compute_visual_energy(video_path: str, start: float, end: float) -> float:
     """
