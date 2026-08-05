@@ -128,7 +128,9 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3, metadata: di
     if not metadata: metadata = {}
     vid_title = metadata.get("title", "Video Highlight")
     vid_tags = metadata.get("tags", ["highlight", "shorts", "video"])
+    channel = metadata.get("channel", "")
     hashtags = " ".join([f"#{t.replace(' ', '')}" for t in vid_tags[:3]]) if vid_tags else "#highlight #shorts #video"
+    credit_suffix = f" Credit to {channel}." if channel else ""
 
     total_segments = len(segments)
     if total_segments <= 3:
@@ -138,7 +140,7 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3, metadata: di
             "hook_strength_score": 9.1,
             "reason": f"Complete video segment: \"{segments[0]['text'][:60]}...\"",
             "title": f"{vid_title} - Short 1" if vid_title else "Full Highlight",
-            "description": f"Check out this highlight from: {vid_title}",
+            "description": f"Check out this highlight from: {vid_title}{credit_suffix}",
             "hashtags": hashtags,
             "transcript_lines": extract_transcript_lines_in_range(segments[0]["start"], segments[-1]["end"], segments)
         }]
@@ -175,7 +177,7 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3, metadata: di
                 "hook_strength_score": round(9.3 - (i - 1) * 0.5, 1),
                 "reason": reason,
                 "title": f"{vid_title} - Part {i}",
-                "description": f"Check out this amazing highlight from the video! {snippet[:60]}...",
+                "description": f"Check out this amazing highlight from the video! {snippet[:60]}...{credit_suffix}",
                 "hashtags": hashtags,
                 "transcript_lines": t_lines
             })
@@ -209,9 +211,11 @@ def select_clips(transcript_json_path: str, model_name: str = "llama3.2:3b", met
 
     tags_str = ", ".join(metadata.get("tags", [])) if metadata and metadata.get("tags") else "general"
     title_str = metadata.get("title", "") if metadata else ""
+    channel_str = metadata.get("channel", "") if metadata else ""
 
     prompt = f"""VIDEO TITLE: "{title_str}"
 TAGS: {tags_str}
+CHANNEL: {channel_str}
 
 TRANSCRIPT SEGMENTS:
 {segments_text}
@@ -219,6 +223,7 @@ TRANSCRIPT SEGMENTS:
 Task: Pick {quantity} top potential viral short clips from the transcript above. 
 CRITICAL: You MUST return a JSON array containing EXACTLY {quantity} objects. 
 EACH object MUST contain the exact following keys: "start", "end", "title", "description", "reason", "hashtags", "hook_strength_score".
+IMPORTANT: You MUST append "Credit to {channel_str}." to the end of your 'description' for every clip if a channel name exists!
 Do NOT return a dictionary of clips, you MUST return a JSON array of objects with the start and end timestamps from the transcript.
 
 Example format:

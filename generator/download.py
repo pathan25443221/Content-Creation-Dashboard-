@@ -130,6 +130,7 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
                     metadata["tags"] = info_data.get("tags") or []
                     metadata["categories"] = info_data.get("categories") or []
                     metadata["description"] = info_data.get("description") or ""
+                    metadata["channel"] = info_data.get("uploader") or info_data.get("channel") or ""
             except Exception as e:
                 print(f"[Warning] Failed to parse info json metadata: {e}", file=sys.stderr)
 

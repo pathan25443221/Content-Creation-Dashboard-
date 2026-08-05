@@ -16,6 +16,9 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
 
     candidates = []
 
+    channel_str = metadata.get("channel", "") if metadata else ""
+    credit_suffix = f" Credit to {channel_str}." if channel_str else ""
+
     # Priority 1: High audio energy spike
     if audio_spikes:
         base_title = metadata.get("title", "Action Highlight").replace(".mp4", "") if metadata else "Action Highlight"
@@ -25,7 +28,7 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
                 "end": spike["end"],
                 "reason": f"Audio energy volume spike (crowd/impact) detected around {spike['peak_time']}s.",
                 "title": f"{base_title} - Part {idx}",
-                "description": f"Epic action and hype moment! You don't want to miss this.",
+                "description": f"Epic action and hype moment! You don't want to miss this.{credit_suffix}",
                 "hashtags": "#action #hype #gaming #shorts"
             })
     
@@ -47,7 +50,7 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
                         "end": max(scene["end"], scene["start"] + 40.0),
                         "reason": f"Visual motion & scene cut sequence ({scene['duration']}s duration).",
                         "title": f"{base_title} - Part {len(candidates) + 1}",
-                        "description": f"Awesome visual sequence. Check out this highlight!",
+                        "description": f"Awesome visual sequence. Check out this highlight!{credit_suffix}",
                         "hashtags": "#highlight #visuals #gaming"
                     })
 
@@ -62,7 +65,7 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
                 "end": start + 40.0,
                 "reason": f"Visual highlight segment {start}s-{start+40.0}s.",
                 "title": f"{base_title} - Part {i+1}",
-                "description": f"Amazing visual highlight clip! Enjoy the action.",
+                "description": f"Amazing visual highlight clip! Enjoy the action.{credit_suffix}",
                 "hashtags": "#highlight #shorts #action"
             })
 
@@ -97,8 +100,9 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
             
             title_str = metadata.get("title", "Gaming Video")
             tags_str = ", ".join(metadata.get("tags", [])) if metadata.get("tags") else "gaming, action"
+            channel_str = metadata.get("channel", "")
             
-            prompt = f"VIDEO TITLE: '{title_str}'\nTAGS: {tags_str}\n\n"
+            prompt = f"VIDEO TITLE: '{title_str}'\nTAGS: {tags_str}\nCHANNEL: {channel_str}\n\n"
             prompt += f"I have {len(candidates)} action/gameplay highlight clips from this video.\n"
             
             # Feed the exact spoken transcript snippet to the LLM for better context
@@ -111,6 +115,9 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
             prompt += "\nGenerate a unique, highly viral YouTube Shorts Title, Description, and Hashtags string for each clip.\n"
             prompt += "Return EXACTLY a JSON array of objects with keys: 'title', 'description', 'hashtags'.\n"
             prompt += f"Length of array MUST be EXACTLY {len(candidates)}.\n"
+            if channel_str:
+                prompt += f"IMPORTANT: You MUST append ' Credit to {channel_str}.' to the end of your 'description' for every clip!\n"
+            
             
             response = ollama.chat(
                 model="llama3.2:3b",
