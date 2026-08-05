@@ -50,7 +50,7 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
 
     # 2. Select candidates based on path
     transcript_json = None
-    if video_type in ["speech", "vlog"]:
+    if video_type in ["speech", "vlog", "center"]:
         print(f"[Router] Path: Speech-based content (mode: {video_type})")
         if progress_callback: progress_callback("Transcribing audio (AI listening)...")
         transcript_json = transcribe_audio(raw_video_path, model_size="tiny", sub_path=sub_path)

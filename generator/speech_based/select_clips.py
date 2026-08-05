@@ -118,13 +118,18 @@ def extract_transcript_lines_in_range(start: float, end: float, raw_segments: li
             })
     return lines
 
-def heuristic_clip_selection(transcript_data: dict, count: int = 3) -> list:
+def heuristic_clip_selection(transcript_data: dict, count: int = 3, metadata: dict = None) -> list:
     """Fallback clip selector aligning start and end timestamps to exact sentence boundaries."""
     print("[SelectClips] Using sentence-aligned heuristic selector...")
     segments = transcript_data.get("segments", [])
     if not segments:
         return []
     
+    if not metadata: metadata = {}
+    vid_title = metadata.get("title", "Video Highlight")
+    vid_tags = metadata.get("tags", ["highlight", "shorts", "video"])
+    hashtags = " ".join([f"#{t.replace(' ', '')}" for t in vid_tags[:3]]) if vid_tags else "#highlight #shorts #video"
+
     total_segments = len(segments)
     if total_segments <= 3:
         return [{
@@ -132,7 +137,9 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3) -> list:
             "end": segments[-1]["end"],
             "hook_strength_score": 9.1,
             "reason": f"Complete video segment: \"{segments[0]['text'][:60]}...\"",
-            "title": "Full Highlight",
+            "title": f"{vid_title} - Short 1" if vid_title else "Full Highlight",
+            "description": f"Check out this highlight from: {vid_title}",
+            "hashtags": hashtags,
             "transcript_lines": extract_transcript_lines_in_range(segments[0]["start"], segments[-1]["end"], segments)
         }]
 
@@ -167,9 +174,9 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3) -> list:
                 "end": round(end_time, 2),
                 "hook_strength_score": round(9.3 - (i - 1) * 0.5, 1),
                 "reason": reason,
-                "title": f"Highlight Short {i}",
+                "title": f"{vid_title} - Part {i}",
                 "description": f"Check out this amazing highlight from the video! {snippet[:60]}...",
-                "hashtags": "#highlight #shorts #video",
+                "hashtags": hashtags,
                 "transcript_lines": t_lines
             })
     return clips
@@ -328,7 +335,7 @@ Example format:
 
         if len(valid_clips) < quantity and raw_segments:
             print(f"[SelectClips] LLM generated {len(valid_clips)} clip(s). Padding with sentence-aligned candidate clips to reach {quantity} total...")
-            heuristics = heuristic_clip_selection(data, count=quantity)
+            heuristics = heuristic_clip_selection(data, count=quantity, metadata=metadata)
             for h in heuristics:
                 if len(valid_clips) >= quantity:
                     break
@@ -341,10 +348,10 @@ Example format:
             return valid_clips
         else:
             print(f"[Warning] Could not extract valid clip array from LLM response. Falling back to heuristics.")
-            return heuristic_clip_selection(data, count=quantity)
+            return heuristic_clip_selection(data, count=quantity, metadata=metadata)
     except Exception as e:
         print(f"[Warning] Ollama chat failed ({e}). Falling back to heuristics.")
-        return heuristic_clip_selection(data, count=quantity)
+        return heuristic_clip_selection(data, count=quantity, metadata=metadata)
 
 def main():
     parser = argparse.ArgumentParser(description="Select short clip candidates using Ollama LLM.")

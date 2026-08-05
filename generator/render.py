@@ -177,14 +177,26 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
             f"[bot_raw][top]scale2ref=w=iw:h=ih*(0.35/0.65)[bottom][top_ref];"
             f"[top_ref][bottom]vstack=inputs=2[stacked]"
         )
+    elif layout_mode == "center":
+        # Blurred background + 16:9 video perfectly centered
+        filter_complex = (
+            f"[0:v]split=2[bg_src][fg_src];"
+            f"[bg_src]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:20[bg];"
+            f"[fg_src]scale=1080:-1[fg];"
+            f"[bg][fg]overlay=(W-w)/2:(H-h)/2[stacked]"
+        )
     else:
         # Standard 9:16 crop (Full height)
         # Tracks x_ratio, but full height (so y is always 0)
         face_x = f"max(0\\,min(iw-ih*(9/16)\\,iw*{x_ratio}-ih*(9/16)/2))"
         filter_complex = f"[0:v]crop=ih*(9/16):ih:{face_x}:0[stacked]"
 
-    # Scale to 1080x1920 standard shorts resolution
-    filter_complex += ";[stacked]scale=1080:1920:flags=lanczos[scaled]"
+    if layout_mode != "center":
+        # Scale to 1080x1920 standard shorts resolution (except for center which already sets canvas to 1080x1920)
+        filter_complex += ";[stacked]scale=1080:1920:flags=lanczos[scaled]"
+    else:
+        # Just pass stacked to scaled
+        filter_complex += ";[stacked]copy[scaled]"
 
     # Burn captions if transcript is present
     if transcript_json_path:

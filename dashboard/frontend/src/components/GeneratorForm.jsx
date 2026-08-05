@@ -53,6 +53,10 @@ export default function GeneratorForm({
               <img src="/Assets/Podcast_mic.png" alt="Podcast" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
               <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Podcast</span>
             </div>
+            <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'center' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('center')}>
+              <img src="/Assets/Podcast_mic.png" alt="Center" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
+              <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Center Focus</span>
+            </div>
             <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'visual' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('visual')}>
               <img src="/Assets/Gaming_controller.png" alt="Gaming" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
               <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Gaming</span>

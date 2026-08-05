@@ -75,6 +75,8 @@ The **Content Creation Dashboard** is an autonomous, single-operator short-form 
 - [x] Enhanced visual clip fallback logic to use original video filenames instead of generic titles when local AI JSON generation fails or times out.
 - [x] Fixed `sqlite3.ProgrammingError` by properly casting generated hashtag lists to comma-separated strings before SQL insertion.
 - [x] Triggered foreground local server login flow to cache fresh YouTube OAuth tokens with full `youtube.readonly` scopes, fixing Analytics 403 errors.
+- [x] Hardened VTT subtitle parser to unescape HTML entities (`&gt;`), strip speaker arrows, and automatically fallback to local Whisper if downloaded VTTs are corrupted (1-segment dumps).
+- [x] Implemented new **Center Focus** FFmpeg layout mode that automatically scales the 16:9 video into the vertical center and fills the borders with a heavily blurred, widescreen background.
 
 ---
 

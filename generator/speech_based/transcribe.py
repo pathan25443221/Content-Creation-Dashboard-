@@ -23,8 +23,8 @@ def parse_subtitles_to_transcript_json(sub_path: str, video_path: str) -> str:
     with open(sub_path, "r", encoding="utf-8", errors="ignore") as f:
         content = f.read()
 
-    # Regex for subtitle timestamp blocks
-    timestamp_pattern = re.compile(r"(\d{1,2}:?\d{2}:\d{2}[\.,]\d{3})\s*-->\s*(\d{1,2}:?\d{2}:\d{2}[\.,]\d{3})")
+    # Regex for subtitle timestamp blocks (handles HH:MM:SS.mmm and MM:SS.mmm)
+    timestamp_pattern = re.compile(r"((?:\d{1,2}:)?\d{1,2}:\d{2}[\.,]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{2}[\.,]\d{3})")
     lines = content.split('\n')
     
     segments = []
@@ -35,16 +35,44 @@ def parse_subtitles_to_transcript_json(sub_path: str, video_path: str) -> str:
         match = timestamp_pattern.search(line_s)
         if match:
             if curr_start is not None and curr_text:
+                import html
                 txt = " ".join(curr_text).strip()
-                # Clean VTT formatting tags like <c> or 00:00:00.000
+                # Clean VTT formatting tags like <c> or <00:00:00.000>
                 txt = re.sub(r'<[^>]+>', '', txt)
+                # Unescape HTML entities like &gt;
+                txt = html.unescape(txt)
+                # Remove speaker brackets and >> symbols
+                txt = txt.replace('>>', '').replace('>', '')
+                txt = re.sub(r'\[.*?\]', '', txt)
+                txt = re.sub(r'\s+', ' ', txt).strip()
+                
                 if txt:
-                    segments.append({
-                        "id": len(segments),
-                        "start": round(curr_start, 2),
-                        "end": round(curr_end, 2),
-                        "text": txt
-                    })
+                    if segments:
+                        prev_txt = segments[-1]["text"]
+                        # Handle YouTube's auto-generated rollup captions (duplicates)
+                        if txt.startswith(prev_txt) or prev_txt in txt:
+                            # It's a rollup expanding on the previous line. Update previous segment instead of duplicating.
+                            segments[-1]["end"] = round(curr_end, 2)
+                            segments[-1]["text"] = txt
+                        elif prev_txt.startswith(txt) or txt in prev_txt:
+                            # It's a fragment of the previous line, skip.
+                            pass
+                        elif txt == prev_txt:
+                            pass
+                        else:
+                            segments.append({
+                                "id": len(segments),
+                                "start": round(curr_start, 2),
+                                "end": round(curr_end, 2),
+                                "text": txt
+                            })
+                    else:
+                        segments.append({
+                            "id": len(segments),
+                            "start": round(curr_start, 2),
+                            "end": round(curr_end, 2),
+                            "text": txt
+                        })
             curr_start = parse_time_str(match.group(1))
             curr_end = parse_time_str(match.group(2))
             curr_text = []
@@ -54,13 +82,28 @@ def parse_subtitles_to_transcript_json(sub_path: str, video_path: str) -> str:
     if curr_start is not None and curr_text:
         txt = " ".join(curr_text).strip()
         txt = re.sub(r'<[^>]+>', '', txt)
+        txt = re.sub(r'\s+', ' ', txt).strip()
+        
         if txt:
-            segments.append({
-                "id": len(segments),
-                "start": round(curr_start, 2),
-                "end": round(curr_end, 2),
-                "text": txt
-            })
+            if segments:
+                prev_txt = segments[-1]["text"]
+                if txt.startswith(prev_txt) or prev_txt in txt:
+                    segments[-1]["end"] = round(curr_end, 2)
+                    segments[-1]["text"] = txt
+                elif not (prev_txt.startswith(txt) or txt in prev_txt):
+                    segments.append({
+                        "id": len(segments),
+                        "start": round(curr_start, 2),
+                        "end": round(curr_end, 2),
+                        "text": txt
+                    })
+            else:
+                segments.append({
+                    "id": len(segments),
+                    "start": round(curr_start, 2),
+                    "end": round(curr_end, 2),
+                    "text": txt
+                })
 
     total_duration = segments[-1]["end"] if segments else 60.0
     full_text = " ".join([s["text"] for s in segments])
@@ -75,9 +118,12 @@ def parse_subtitles_to_transcript_json(sub_path: str, video_path: str) -> str:
 
     base_name = os.path.splitext(video_path)[0]
     output_json_path = f"{base_name}_transcript.json"
+    if len(segments) <= 3:
+        raise ValueError(f"Extracted only {len(segments)} segments. The VTT file is likely corrupted (e.g., all text dumped in one segment).")
+
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
-
+    
     print(f"[Transcribe] FAST-PATH Complete! Saved transcript with {len(segments)} segments to: {output_json_path}")
     return os.path.abspath(output_json_path)
 

@@ -78,6 +78,7 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
         video_path = None
         info_json_path = None
         sub_path = None
+        sub_candidates = []
         
         for file in os.listdir(output_dir):
             full_p = os.path.abspath(os.path.join(output_dir, file))
@@ -85,11 +86,22 @@ def download_video(url: str, output_dir: str = "generator/raw", quality: str = "
                 if file.endswith(".info.json"):
                     info_json_path = full_p
                 elif file.endswith((".vtt", ".srt")):
-                    if not sub_path or file.endswith(".srt"):
-                        sub_path = full_p
+                    sub_candidates.append(full_p)
                 elif file.endswith((".mp4", ".webm", ".mkv", ".mov", ".avi")) and not file.endswith(".part"):
                     if not re.search(r'\.f\d+\.', file):
                         video_path = full_p
+
+        if sub_candidates:
+            # Prefer .en.vtt, .srt, and shorter filenames to avoid broken auto-gen VTTs
+            def sub_score(p):
+                score = 0
+                if p.endswith(".srt"): score += 100
+                if ".en." in p or ".en-orig." in p: score += 50
+                score -= len(os.path.basename(p)) # penalize long weird tags like .en-en-US-cvf...
+                return score
+            sub_candidates.sort(key=sub_score, reverse=True)
+            sub_path = sub_candidates[0]
+            print(f"[Generator] Best subtitle selected: {sub_path}")
 
         # Fallback: check most recent media file in last 120s
         if not video_path:
