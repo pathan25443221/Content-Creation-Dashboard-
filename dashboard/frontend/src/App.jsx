@@ -145,7 +145,7 @@ export default function App() {
   const handleApprove = async (clipId, customTitle, customDescription, customHashtags, platforms) => {
     if (!platforms || platforms.length === 0) {
       alert("Please select at least one platform to publish to.");
-      return;
+      return { success: false, message: "No platform selected." };
     }
     try {
       const res = await fetch(`/api/clips/${clipId}/approve`, {
@@ -161,9 +161,14 @@ export default function App() {
       if (res.ok) {
         fetchClips('pending');
         fetchOverview();
+        return { success: true };
+      } else {
+        const data = await res.json();
+        return { success: false, message: data.detail || "Upload failed" };
       }
     } catch (e) {
       console.error("Approve failed:", e);
+      return { success: false, message: "Network error: " + e.message };
     }
   };
 

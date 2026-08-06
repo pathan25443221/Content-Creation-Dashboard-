@@ -44,6 +44,14 @@ body {
   min-height: 100vh;
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
 /* Sidebar */
 .sidebar {
   width: 260px;

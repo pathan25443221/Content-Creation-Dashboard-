@@ -7,9 +7,27 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
 
   const [publishToYT, setPublishToYT] = useState(true);
   const [publishToIG, setPublishToIG] = useState(true);
+  
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const onPublishClick = async () => {
+    setIsPublishing(true);
+    setErrorMsg('');
+    const platforms = [];
+    if (publishToYT) platforms.push('youtube');
+    if (publishToIG) platforms.push('instagram');
+    
+    const result = await handleApprove(clip.id, title, description, '', platforms);
+    if (result && !result.success) {
+      setErrorMsg(result.message);
+      setIsPublishing(false);
+    }
+    // if success, the parent will re-fetch and this card will unmount
+  };
 
   return (
-    <div className="vizard-card glass-panel">
+    <div className="vizard-card glass-panel" style={{ border: errorMsg ? '2px solid #ef4444' : 'none' }}>
       {/* Left Column: 9:16 Vertical Video Player */}
       <div className="vizard-media-col">
         {clip.media_url && (
@@ -36,9 +54,16 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
               className="form-input"
               style={{ flex: 1, fontSize: '1.2rem', padding: '4px 8px' }}
               placeholder="Post Title..."
+              disabled={isPublishing}
             />
           </h2>
         </div>
+
+        {errorMsg && (
+          <div style={{ background: '#fef2f2', color: '#b91c1c', padding: '12px', borderRadius: '8px', fontSize: '0.9rem', marginBottom: '12px', border: '1px solid #f87171' }}>
+            <strong>Publishing Failed:</strong> {errorMsg}
+          </div>
+        )}
 
         {/* Virality Score and Actions Bar */}
         <div className="vizard-score-actions-row">
@@ -50,19 +75,21 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
           <div className="vizard-action-group">
             <button 
               className="vizard-btn-publish" 
-              onClick={() => {
-                const platforms = [];
-                if (publishToYT) platforms.push('youtube');
-                if (publishToIG) platforms.push('instagram');
-                handleApprove(clip.id, title, description, '', platforms);
-              }}
+              onClick={onPublishClick}
+              disabled={isPublishing}
+              style={{ opacity: isPublishing ? 0.7 : 1, cursor: isPublishing ? 'not-allowed' : 'pointer' }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-              Publish
+              {isPublishing ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="spin-icon"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              )}
+              {isPublishing ? 'Publishing...' : 'Publish'}
             </button>
             <button 
               className="vizard-btn-reject"
               onClick={() => handleReject(clip.id)}
+              disabled={isPublishing}
               title="Reject clip"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

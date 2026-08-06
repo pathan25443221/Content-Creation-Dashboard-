@@ -175,7 +175,7 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
             f"[0:v]{bottom_crop}[bot_raw];"
             # scale bot_raw to the same width as top, but adjust height to exactly 35/65 of the top's height
             f"[bot_raw][top]scale2ref=w=iw:h=ih*(0.35/0.65)[bottom][top_ref];"
-            f"[top_ref][bottom]vstack=inputs=2[stacked]"
+            f"[bottom][top_ref]vstack=inputs=2[stacked]"
         )
     elif layout_mode == "center":
         # Blurred background + 16:9 video perfectly centered

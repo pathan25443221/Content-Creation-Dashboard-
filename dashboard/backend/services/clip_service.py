@@ -77,6 +77,20 @@ def list_clips(session: Session, status: Optional[str] = None):
         })
     return result
 
+def _get_friendly_error(raw_error: str) -> str:
+    err = str(raw_error).lower()
+    if "10054" in err or "forcibly closed" in err or "connection reset" in err:
+        return "Network connection was lost during upload. Please check your internet and retry."
+    if "invalid_scope" in err:
+        return "Authentication error. Your login session may be invalid or missing permissions."
+    if "quota" in err or "rate limit" in err:
+        return "You have reached your daily upload limit for this platform."
+    if "timeout" in err:
+        return "The upload timed out because it took too long. Please try again."
+    if "unauthorized" in err or "401" in err or "403" in err:
+        return "Unauthorized. Please check your account connection."
+    return raw_error # fallback if unknown
+
 def approve_clip(session: Session, clip_id: int, req_title: Optional[str], req_desc: Optional[str], req_hashtags: Optional[str], platforms: List[str]):
     clip = session.get(Clip, clip_id)
     if not clip:
@@ -95,7 +109,26 @@ def approve_clip(session: Session, clip_id: int, req_title: Optional[str], req_d
 
     queue_clip_for_publishing(clip_id, platforms)
     process_publishing_queue()
-    return True, f"Clip {clip_id} approved and queued for publishing."
+    
+    # Check if any posts failed during synchronous publishing
+    failed_posts = session.exec(
+        select(Post).where(Post.clip_id == clip_id).where(Post.status == "failed")
+    ).all()
+    
+    if failed_posts:
+        error_msgs = []
+        for fp in failed_posts:
+            friendly_msg = _get_friendly_error(fp.error_message)
+            error_msgs.append(f"[{fp.platform.upper()}]: {friendly_msg}")
+            session.delete(fp)
+            
+        # Rollback clip status so it reappears in queue
+        clip.status = "pending"
+        session.add(clip)
+        session.commit()
+        return False, " " + " | ".join(error_msgs)
+        
+    return True, f"Clip {clip_id} successfully published to {', '.join(platforms)}."
 
 def reject_clip(session: Session, clip_id: int):
     clip = session.get(Clip, clip_id)

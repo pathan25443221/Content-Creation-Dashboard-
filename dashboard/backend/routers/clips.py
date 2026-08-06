@@ -56,7 +56,7 @@ def api_approve_clip(clip_id: int, req: ApproveRequest):
     with Session(engine) as session:
         success, message = approve_clip(session, clip_id, req.title, req.description, req.hashtags, req.platforms)
         if not success:
-            raise HTTPException(status_code=404, detail=message)
+            raise HTTPException(status_code=400, detail=message)
     
     notify_clients("update")
     return {
