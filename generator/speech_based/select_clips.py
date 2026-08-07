@@ -177,7 +177,7 @@ def heuristic_clip_selection(transcript_data: dict, count: int = 3, metadata: di
                 "hook_strength_score": round(9.3 - (i - 1) * 0.5, 1),
                 "reason": reason,
                 "title": f"{vid_title} - Part {i}",
-                "description": f"Check out this amazing highlight from the video! {snippet[:60]}...{credit_suffix}",
+                "description": f"Check out this amazing highlight from the video! {credit_suffix}".strip(),
                 "hashtags": hashtags,
                 "transcript_lines": t_lines
             })
@@ -223,7 +223,6 @@ TRANSCRIPT SEGMENTS:
 Task: Pick {quantity} top potential viral short clips from the transcript above. 
 CRITICAL: You MUST return a JSON array containing EXACTLY {quantity} objects. 
 EACH object MUST contain the exact following keys: "start", "end", "title", "description", "reason", "hashtags", "hook_strength_score".
-IMPORTANT: You MUST append "Credit to {channel_str}." to the end of your 'description' for every clip if a channel name exists!
 Do NOT return a dictionary of clips, you MUST return a JSON array of objects with the start and end timestamps from the transcript.
 
 Example format:
@@ -295,6 +294,9 @@ Example format:
                     ai_reason = f"Strong hook starting with: \"{snippet[:70]}\" - high viewer retention potential." if snippet else f"Selected by AI for high 0-3s viewer retention ({dur}s)."
                 
                 title = str(c.get("title", "")).strip() or f"Highlight Short {idx}"
+                desc = str(c.get("description", "")).strip()
+                if credit_suffix and credit_suffix.strip() not in desc:
+                    desc = f"{desc} {credit_suffix.strip()}".strip()
                 
                 try:
                     h_score = round(float(c.get("hook_strength_score", c.get("virality_score", 9.4 - (idx - 1) * 0.4))), 1)
@@ -329,7 +331,7 @@ Example format:
                     "end": adj_end,
                     "reason": ai_reason,
                     "title": title,
-                    "description": c.get("description", ""),
+                    "description": desc,
                     "hashtags": c.get("hashtags", ""),
                     "virality_score": final_score, # Keep key for frontend compatibility
                     "hook_strength_score": h_score,

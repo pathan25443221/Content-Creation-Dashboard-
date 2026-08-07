@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,6 +13,7 @@ import {
 } from 'recharts';
 
 export default function AnalyticsTab({ overview, fetchOverview, posts, fetchPosts }) {
+  const [lastSynced, setLastSynced] = useState('Just now');
   // Sort posts by views descending for the leaderboard
   const topPosts = useMemo(() => {
     if (!posts) return [];
@@ -23,14 +26,20 @@ export default function AnalyticsTab({ overview, fetchOverview, posts, fetchPost
   // Format data for the chart (taking top 10 for chart readability)
   const chartData = useMemo(() => {
     if (!posts) return [];
+
+    let cumulative = 0;
     return [...posts]
       .filter(p => p.latest_metrics)
       .sort((a, b) => new Date(a.posted_at) - new Date(b.posted_at))
-      .map(p => ({
-        name: p.clip_title.substring(0, 15) + '...',
-        views: p.latest_metrics.views,
-        platform: p.platform
-      }));
+      .map(p => {
+        cumulative += p.latest_metrics.views;
+        return {
+          name: p.clip_title.substring(0, 15) + '...',
+          views: p.latest_metrics.views,
+          cumulativeViews: cumulative,
+          platform: p.platform
+        };
+      });
   }, [posts]);
 
   return (
@@ -38,23 +47,27 @@ export default function AnalyticsTab({ overview, fetchOverview, posts, fetchPost
       <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <h1 className="page-title">Clip Performance Analytics</h1>
-          <p className="page-subtitle">Simulated historical performance data (mocked due to missing API keys).</p>
+          <p className="page-subtitle">Simulated historical performance data.</p>
         </div>
-        <button 
-          className="btn-primary"
-          style={{ padding: '10px 20px', borderRadius: '8px', background: 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))', color: 'white', border: 'none', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)' }}
-          onClick={async () => {
-            const btn = document.getElementById('syncBtn');
-            btn.innerText = 'Syncing...';
-            await fetch('/api/poll', { method: 'POST' });
-            await fetchOverview();
-            if (fetchPosts) await fetchPosts();
-            btn.innerText = 'Sync Latest Metrics';
-          }}
-          id="syncBtn"
-        >
-          Sync Latest Metrics
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Last synced: {lastSynced}</span>
+          <button
+            className="btn-primary"
+            style={{ padding: '10px 20px', borderRadius: '8px', background: 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))', color: 'white', border: 'none', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)' }}
+            onClick={async () => {
+              const btn = document.getElementById('syncBtn');
+              btn.innerText = 'Syncing...';
+              await fetch('/api/poll', { method: 'POST' });
+              await fetchOverview();
+              if (fetchPosts) await fetchPosts();
+              btn.innerText = 'Sync Latest Metrics';
+              setLastSynced(new Date().toLocaleTimeString());
+            }}
+            id="syncBtn"
+          >
+            Sync Latest Metrics
+          </button>
+        </div>
       </header>
 
       <div className="stats-grid">
@@ -73,32 +86,28 @@ export default function AnalyticsTab({ overview, fetchOverview, posts, fetchPost
       </div>
 
       <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '24px', marginTop: '32px' }}>
-        
+
         {/* Main Chart Section */}
         <div className="card-box glass-panel" style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(255,255,255,0.9)' }}>
           <h3 style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontWeight: '800' }}>
             <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: 'var(--accent-blue)' }}></span>
             Views Over Time
           </h3>
-          
+
           {chartData.length > 0 ? (
             <div style={{ width: '100%', height: 350 }}>
               <ResponsiveContainer>
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                <LineChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="name" stroke="#64748b" tick={{fill: '#475569', fontSize: '0.85rem', fontWeight: 500}} axisLine={{stroke: 'rgba(0,0,0,0.1)'}} tickLine={false} />
-                  <YAxis stroke="#64748b" tick={{fill: '#475569', fontSize: '0.85rem', fontWeight: 500}} axisLine={false} tickLine={false} />
-                  <Tooltip 
-                    cursor={{fill: 'rgba(0,0,0,0.03)'}}
+                  <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#475569', fontSize: '0.85rem', fontWeight: 500 }} axisLine={{ stroke: 'rgba(0,0,0,0.1)' }} tickLine={false} />
+                  <YAxis stroke="#64748b" tick={{ fill: '#475569', fontSize: '0.85rem', fontWeight: 500 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                     contentStyle={{ backgroundColor: '#ffffff', border: 'none', borderRadius: '12px', color: '#0f172a', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', fontWeight: '600' }}
                     itemStyle={{ color: 'var(--accent-blue)' }}
                   />
-                  <Bar dataKey="views" radius={[6, 6, 0, 0]} maxBarSize={60}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.platform === 'youtube' ? '#ef4444' : 'var(--accent-blue)'} />
-                    ))}
-                  </Bar>
-                </BarChart>
+                  <Line type="monotone" dataKey="cumulativeViews" stroke="var(--accent-purple)" strokeWidth={4} dot={{ r: 6, fill: 'var(--accent-blue)', strokeWidth: 2, stroke: 'white' }} activeDot={{ r: 8 }} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (
@@ -150,9 +159,9 @@ export default function AnalyticsTab({ overview, fetchOverview, posts, fetchPost
                 </div>
               </div>
             )) : (
-               <div style={{ color: '#64748b', textAlign: 'center', padding: '30px 0', fontWeight: '500' }}>
-                 No posts available.
-               </div>
+              <div style={{ color: '#64748b', textAlign: 'center', padding: '30px 0', fontWeight: '500' }}>
+                No posts available.
+              </div>
             )}
           </div>
         </div>

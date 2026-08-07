@@ -34,8 +34,10 @@ def get_clip_transcript_lines(file_path: str, start_time: float, end_time: float
         print(f"[Warning] Failed to read transcript lines from {target_path}: {e}")
     return lines[:6]
 
+from sqlalchemy.orm import selectinload
+
 def list_clips(session: Session, status: Optional[str] = None):
-    query = select(Clip)
+    query = select(Clip).options(selectinload(Clip.video), selectinload(Clip.posts))
     if status:
         query = query.where(Clip.status == status)
     query = query.order_by(Clip.created_at.desc())
@@ -43,8 +45,8 @@ def list_clips(session: Session, status: Optional[str] = None):
 
     result = []
     for c in clips:
-        video = session.get(Video, c.video_id)
-        posts = session.exec(select(Post).where(Post.clip_id == c.id)).all()
+        video = c.video
+        posts = c.posts
         t_lines = get_clip_transcript_lines(c.file_path, c.start_time, c.end_time)
 
         result.append({

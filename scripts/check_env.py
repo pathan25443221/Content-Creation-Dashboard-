@@ -42,7 +42,7 @@ def check_ollama_service():
 
 def main():
     print("=" * 50)
-    print(" Content Dashboard — Environment & Dependency Check")
+    print(" ClipForge — Environment & Dependency Check")
     print("=" * 50)
     
     python_ok = check_python_version()

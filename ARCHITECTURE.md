@@ -1,4 +1,4 @@
-# Architecture: Content Dashboard
+# Architecture: ClipForge
 
 ## 1. App flow
 

@@ -153,7 +153,7 @@ def process_video_pipeline(video_input: str, video_type: str = "speech", ollama_
     return result
 
 def main():
-    parser = argparse.ArgumentParser(description="Content Dashboard Generator Router.")
+    parser = argparse.ArgumentParser(description="ClipForge Generator Router.")
     parser.add_argument("video_input", help="Video URL or local mp4 file path")
     parser.add_argument("--type", choices=["speech", "visual"], default="speech", help="Path type")
     parser.add_argument("--model", default="llama3.1:8b", help="Ollama model for clip selection")

@@ -68,8 +68,8 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
         {/* Virality Score and Actions Bar */}
         <div className="vizard-score-actions-row">
           <div className="vizard-virality-badge">
-            <span className="vizard-score-val">{clip.virality_score || 8.5}</span>
-            <span className="vizard-score-lbl">VIRALITY</span>
+            <span className="vizard-score-val" style={{ fontSize: '1.2rem' }}>{clip.virality_score || 8.5}</span>
+            <span className="vizard-score-lbl">AI CONFIDENCE</span>
           </div>
 
           <div className="vizard-action-group">
@@ -91,8 +91,10 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
               onClick={() => handleReject(clip.id)}
               disabled={isPublishing}
               title="Reject clip"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(255, 255, 255, 0.4)', fontWeight: '600', color: 'var(--text-main)', cursor: 'pointer' }}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              Reject
             </button>
           </div>
         </div>

@@ -9,7 +9,7 @@ from dashboard.backend.core.sse import init_sse_state
 from dashboard.backend.routers import stream, clips, analytics
 
 app = FastAPI(
-    title="Content Dashboard API",
+    title="ClipForge API",
     description="Backend API serving the single-operator content generation, review, publishing, and analytics dashboard.",
     version="1.0.0"
 )
@@ -36,7 +36,7 @@ def health_check():
     """API Root Health Check endpoint."""
     return {
         "status": "ok",
-        "message": "Content Dashboard API is up and running",
+        "message": "ClipForge API is up and running",
         "timestamp": datetime.utcnow().isoformat()
     }
 

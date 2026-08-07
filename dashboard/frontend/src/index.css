@@ -190,9 +190,22 @@ body {
 }
 
 .stat-value {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin-top: 4px;
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.stat-trend {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.trend-up {
+  color: var(--badge-posted);
+}
+
+.trend-neutral {
+  color: var(--badge-pending);
 }
 
 /* Input Form Box */

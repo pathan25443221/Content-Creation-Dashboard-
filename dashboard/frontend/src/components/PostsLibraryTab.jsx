@@ -1,11 +1,36 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 export default function PostsLibraryTab({ posts }) {
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [platformFilter, setPlatformFilter] = useState('all');
+
+  const filteredPosts = posts.filter(post => {
+    if (statusFilter !== 'all' && post.status !== statusFilter) return false;
+    if (platformFilter !== 'all' && post.platform !== platformFilter) return false;
+    return true;
+  });
+
   return (
     <div>
-      <header className="page-header">
-        <h1 className="page-title">Posts Library</h1>
-        <p className="page-subtitle">All generated clips and their publishing status across connected social platforms.</p>
+      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 className="page-title">Posts Library</h1>
+          <p className="page-subtitle">All generated clips and their publishing status across connected social platforms.</p>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <select className="select-input" value={platformFilter} onChange={e => setPlatformFilter(e.target.value)}>
+            <option value="all">All Platforms</option>
+            <option value="youtube">YouTube</option>
+            <option value="instagram">Instagram</option>
+            <option value="tiktok">TikTok</option>
+          </select>
+          <select className="select-input" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="all">All Statuses</option>
+            <option value="published">Published</option>
+            <option value="queued">Queued</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
       </header>
 
       <div className="card-box glass-panel" style={{ padding: 0, overflow: 'hidden' }}>
@@ -21,14 +46,14 @@ export default function PostsLibraryTab({ posts }) {
             </tr>
           </thead>
           <tbody>
-            {posts.length === 0 ? (
+            {filteredPosts.length === 0 ? (
               <tr>
                 <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
-                  No published posts found. Approve clips in the Review Queue to queue posts.
+                  No posts found matching the filters.
                 </td>
               </tr>
             ) : (
-              posts.map((post) => (
+              filteredPosts.map((post) => (
                 <tr key={post.id}>
                   <td><strong>{post.clip_title}</strong></td>
                   <td style={{ textTransform: 'capitalize' }}>{post.platform}</td>
@@ -40,10 +65,10 @@ export default function PostsLibraryTab({ posts }) {
                     </span>
                   </td>
                   <td>
-                    {post.latest_metrics ? (
+                    {post.latest_metrics && (post.latest_metrics.views > 0 || post.latest_metrics.likes > 0) ? (
                       <span>{post.latest_metrics.views} views / {post.latest_metrics.likes} likes</span>
                     ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>Pending sync</span>
+                      <span className="badge badge-pending">Syncing...</span>
                     )}
                   </td>
                 </tr>
