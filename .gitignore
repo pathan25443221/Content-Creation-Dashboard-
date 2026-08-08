@@ -44,3 +44,7 @@ Thumbs.db
 cookies.txt
 *cookies*.txt
 ai_test.json
+
+# Agents
+.agents/
+
