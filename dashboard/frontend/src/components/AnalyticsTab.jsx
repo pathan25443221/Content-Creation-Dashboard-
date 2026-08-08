@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import NumberFlow from '@number-flow/react';
 import {
   BarChart,
   Bar,
@@ -73,15 +74,21 @@ export default function AnalyticsTab({ overview, fetchOverview, posts, fetchPost
       <div className="stats-grid">
         <div className="stat-card glass-panel" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)', border: '1px solid rgba(255,255,255,1)', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
           <div className="stat-label" style={{ color: '#64748b', fontWeight: '600' }}>Total Views</div>
-          <div className="stat-value" style={{ color: 'var(--accent-blue)', fontSize: '2.2rem', letterSpacing: '-1px' }}>{(overview.total_views || 0).toLocaleString()}</div>
+          <div className="stat-value" style={{ color: 'var(--accent-blue)', fontSize: '2.2rem', letterSpacing: '-1px' }}>
+            <NumberFlow value={overview.total_views || 0} />
+          </div>
         </div>
         <div className="stat-card glass-panel" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #fcf8ff 100%)', border: '1px solid rgba(255,255,255,1)', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
           <div className="stat-label" style={{ color: '#64748b', fontWeight: '600' }}>Total Likes</div>
-          <div className="stat-value" style={{ color: 'var(--accent-purple)', fontSize: '2.2rem', letterSpacing: '-1px' }}>{(overview.total_likes || 0).toLocaleString()}</div>
+          <div className="stat-value" style={{ color: 'var(--accent-purple)', fontSize: '2.2rem', letterSpacing: '-1px' }}>
+            <NumberFlow value={overview.total_likes || 0} />
+          </div>
         </div>
         <div className="stat-card glass-panel" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%)', border: '1px solid rgba(255,255,255,1)', boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }}>
           <div className="stat-label" style={{ color: '#64748b', fontWeight: '600' }}>Total Comments</div>
-          <div className="stat-value" style={{ color: '#0d9488', fontSize: '2.2rem', letterSpacing: '-1px' }}>{(overview.total_comments || 0).toLocaleString()}</div>
+          <div className="stat-value" style={{ color: '#0d9488', fontSize: '2.2rem', letterSpacing: '-1px' }}>
+            <NumberFlow value={overview.total_comments || 0} />
+          </div>
         </div>
       </div>
 

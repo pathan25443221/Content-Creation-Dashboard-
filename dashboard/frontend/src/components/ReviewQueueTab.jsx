@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
-function ReviewCard({ clip, idx, handleApprove, handleReject }) {
+function ReviewCard({ clip, idx, handleApprove, onRejectRequest }) {
   const initialTitle = clip.title ? (clip.hashtags ? `${clip.title} ${clip.hashtags}` : clip.title) : '';
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(clip.description || '');
@@ -9,25 +11,35 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
   const [publishToIG, setPublishToIG] = useState(true);
   
   const [isPublishing, setIsPublishing] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
 
   const onPublishClick = async () => {
-    setIsPublishing(true);
-    setErrorMsg('');
     const platforms = [];
     if (publishToYT) platforms.push('youtube');
     if (publishToIG) platforms.push('instagram');
     
+    if (platforms.length === 0) {
+      toast.error('Please select at least one platform to publish to.');
+      return;
+    }
+
+    setIsPublishing(true);
     const result = await handleApprove(clip.id, title, description, '', platforms);
     if (result && !result.success) {
-      setErrorMsg(result.message);
+      toast.error(`Publishing Failed: ${result.message}`);
       setIsPublishing(false);
+    } else {
+      toast.success('Clip successfully approved and published!');
     }
-    // if success, the parent will re-fetch and this card will unmount
   };
 
   return (
-    <div className="vizard-card glass-panel" style={{ border: errorMsg ? '2px solid #ef4444' : 'none' }}>
+    <motion.div 
+      className="vizard-card glass-panel"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.25, delay: idx * 0.05 }}
+    >
       {/* Left Column: 9:16 Vertical Video Player */}
       <div className="vizard-media-col">
         {clip.media_url && (
@@ -42,37 +54,24 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
         )}
       </div>
 
-      {/* Right Column: Vizard Card Details */}
+      {/* Right Column: Details */}
       <div className="vizard-details-col">
-        <div className="vizard-header-row">
-          <h2 className="vizard-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-            <span className="vizard-num">#{idx + 1}</span>
+        {/* Top Header Row with Title input & Action buttons */}
+        <div className="vizard-header-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div style={{ flex: 1 }}>
+            <div className="vizard-reason-label" style={{ marginBottom: '4px', color: 'var(--text-muted)' }}>Clip Title</div>
             <input 
               type="text" 
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="form-input"
-              style={{ flex: 1, fontSize: '1.2rem', padding: '4px 8px' }}
+              style={{ width: '100%', fontSize: '1.05rem', fontWeight: 600 }}
               placeholder="Post Title..."
               disabled={isPublishing}
             />
-          </h2>
-        </div>
-
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', color: '#b91c1c', padding: '12px', borderRadius: '8px', fontSize: '0.9rem', marginBottom: '12px', border: '1px solid #f87171' }}>
-            <strong>Publishing Failed:</strong> {errorMsg}
-          </div>
-        )}
-
-        {/* Virality Score and Actions Bar */}
-        <div className="vizard-score-actions-row">
-          <div className="vizard-virality-badge">
-            <span className="vizard-score-val" style={{ fontSize: '1.2rem' }}>{clip.virality_score || 8.5}</span>
-            <span className="vizard-score-lbl">AI CONFIDENCE</span>
           </div>
 
-          <div className="vizard-action-group">
+          <div className="vizard-action-group" style={{ paddingTop: '16px' }}>
             <button 
               className="vizard-btn-publish" 
               onClick={onPublishClick}
@@ -88,45 +87,63 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
             </button>
             <button 
               className="vizard-btn-reject"
-              onClick={() => handleReject(clip.id)}
+              onClick={() => onRejectRequest(clip)}
               disabled={isPublishing}
               title="Reject clip"
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 16px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'rgba(255, 255, 255, 0.4)', fontWeight: '600', color: 'var(--text-main)', cursor: 'pointer' }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              Reject
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
           </div>
         </div>
 
+        {/* Big Virality Score Banner */}
+        <div className="vizard-score-actions-row" style={{ marginTop: '14px', marginBottom: '14px', padding: '12px 18px', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="vizard-virality-badge">
+            <span className="vizard-score-val-hero">{clip.virality_score || 8.5}</span>
+            <span className="vizard-score-lbl">AI Virality & Quality Score</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--badge-posted)', fontSize: '0.85rem', fontWeight: 600 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            High Retention Potential
+          </div>
+        </div>
+
         {/* Editable Metadata Fields */}
-        <div className="vizard-reason-card" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="vizard-reason-card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
-            <div className="vizard-reason-label" style={{ marginBottom: '4px' }}>Description</div>
+            <div className="vizard-reason-label" style={{ marginBottom: '6px', color: 'var(--text-muted)' }}>Description</div>
             <textarea 
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="form-input"
-              style={{ width: '100%', minHeight: '60px', resize: 'vertical' }}
+              style={{ width: '100%', minHeight: '70px', resize: 'vertical' }}
               placeholder="YouTube / Instagram Description..."
             />
           </div>
-          <div style={{ marginTop: '5px' }}>
-            <div className="vizard-reason-label" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Platforms</div>
-            <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: '#0f172a', fontWeight: '600' }}>
-                <input type="checkbox" checked={publishToYT} onChange={(e) => setPublishToYT(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-blue)' }} />
+          <div>
+            <div className="vizard-reason-label" style={{ color: 'var(--text-muted)', marginBottom: '8px' }}>Target Platforms</div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                type="button"
+                className={`platform-toggle-btn youtube ${publishToYT ? 'active' : ''}`}
+                onClick={() => setPublishToYT(!publishToYT)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
                 YouTube Shorts
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem', color: '#0f172a', fontWeight: '600' }}>
-                <input type="checkbox" checked={publishToIG} onChange={(e) => setPublishToIG(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: 'var(--accent-purple)' }} />
+              </button>
+              <button 
+                type="button"
+                className={`platform-toggle-btn instagram ${publishToIG ? 'active' : ''}`}
+                onClick={() => setPublishToIG(!publishToIG)}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
                 Instagram Reels
-              </label>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Timestamped Subtitle Transcript Preview */}
+        {/* Transcript Preview */}
         {clip.transcript_lines && clip.transcript_lines.length > 0 && (
           <div className="vizard-transcript-container">
             {clip.transcript_lines.map((line, lIdx) => (
@@ -138,11 +155,46 @@ function ReviewCard({ clip, idx, handleApprove, handleReject }) {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
 export default function ReviewQueueTab({ clips, handleApprove, handleReject }) {
+  const [pendingRejections, setPendingRejections] = useState({});
+
+  const onRejectRequest = (clip) => {
+    // Set a 3-second deferral timer
+    const timerId = setTimeout(() => {
+      handleReject(clip.id);
+      setPendingRejections(prev => {
+        const next = { ...prev };
+        delete next[clip.id];
+        return next;
+      });
+    }, 3000);
+
+    setPendingRejections(prev => ({
+      ...prev,
+      [clip.id]: { clip, timerId }
+    }));
+  };
+
+  const handleUndo = (clipId) => {
+    const item = pendingRejections[clipId];
+    if (item) {
+      clearTimeout(item.timerId);
+      setPendingRejections(prev => {
+        const next = { ...prev };
+        delete next[clipId];
+        return next;
+      });
+      toast.info('Rejection undone');
+    }
+  };
+
+  const visibleClips = clips.filter(c => !pendingRejections[c.id]);
+  const activeRejectionList = Object.values(pendingRejections);
+
   return (
     <div>
       <header className="page-header">
@@ -150,20 +202,37 @@ export default function ReviewQueueTab({ clips, handleApprove, handleReject }) {
         <p className="page-subtitle">Review candidate clips selected by local AI models before publishing.</p>
       </header>
 
-      {clips.length === 0 ? (
+      {visibleClips.length === 0 ? (
         <div className="card-box glass-panel" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
           No candidate clips awaiting review. Use "Generate Clip" to process a new video!
         </div>
       ) : (
         <div className="vizard-review-list">
-          {clips.map((clip, idx) => (
-            <ReviewCard 
-              key={clip.id} 
-              clip={clip} 
-              idx={idx} 
-              handleApprove={handleApprove} 
-              handleReject={handleReject} 
-            />
+          <AnimatePresence>
+            {visibleClips.map((clip, idx) => (
+              <ReviewCard 
+                key={clip.id} 
+                clip={clip} 
+                idx={idx} 
+                handleApprove={handleApprove} 
+                onRejectRequest={onRejectRequest} 
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Kinetics UndoSnackbar */}
+      {activeRejectionList.length > 0 && (
+        <div className="snackbar-container">
+          {activeRejectionList.map(({ clip }) => (
+            <div key={clip.id} className="snackbar">
+              <span>Clip #{clip.id} marked as rejected</span>
+              <button className="snackbar-undo-btn" onClick={() => handleUndo(clip.id)}>
+                Undo
+              </button>
+              <div className="snackbar-progress" />
+            </div>
           ))}
         </div>
       )}

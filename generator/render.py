@@ -182,7 +182,7 @@ def render_clip(video_path: str, start: float, end: float, output_path: str, tra
         filter_complex = (
             f"[0:v]split=2[bg_src][fg_src];"
             f"[bg_src]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:20[bg];"
-            f"[fg_src]scale=1080:-1[fg];"
+            f"[fg_src]crop=iw*0.85:ih*0.85:(iw-iw*0.85)/2:(ih-ih*0.85)/2,scale=1080:-1[fg];"
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2[stacked]"
         )
     else:

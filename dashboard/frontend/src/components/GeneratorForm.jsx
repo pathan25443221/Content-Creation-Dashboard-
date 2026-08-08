@@ -24,55 +24,75 @@ export default function GeneratorForm({
       <h3 style={{ marginBottom: '16px', color: '#0f172a' }}>Generate New AI Clip</h3>
       <form onSubmit={handleGenerateSubmit}>
 
-        <div className="input-group" style={{ marginBottom: '24px', gap: 0 }}>
-          <span style={{
-            background: 'rgba(255,255,255,0.6)',
-            padding: '16px 12px 16px 24px',
-            borderRadius: '20px 0 0 20px',
-            border: '1px solid rgba(255,255,255,0.8)',
-            borderRight: 'none',
-            display: 'flex',
-            alignItems: 'center'
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-          </span>
-          <input
-            type="text"
-            className="url-input"
-            style={{ borderRadius: '0 20px 20px 0', borderLeft: 'none', paddingLeft: '8px', boxShadow: 'none' }}
-            placeholder="Enter YouTube/Twitch URL..."
-            value={videoInput}
-            onChange={(e) => setVideoInput(e.target.value)}
-          />
+        <div className="input-group" style={{ marginBottom: '24px', width: '100%', display: 'flex', alignItems: 'center' }}>
+          <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+            <span style={{
+              position: 'absolute',
+              left: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              pointerEvents: 'none',
+              zIndex: 2
+            }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            </span>
+            <input
+              type="text"
+              className="url-input"
+              style={{ width: '100%', paddingLeft: '44px', paddingRight: '16px' }}
+              placeholder="Enter YouTube / Twitch URL..."
+              value={videoInput}
+              onChange={(e) => setVideoInput(e.target.value)}
+            />
+          </div>
         </div>
 
         <div style={{ marginBottom: '32px' }}>
-          <h4 style={{ color: '#0f172a', marginBottom: '16px' }}>AI Styles</h4>
-          <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'speech' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('speech')}>
-              <img src="/Assets/Podcast_mic.png" alt="Podcast" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
-              <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Podcast</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>Ideal for conversations</span>
+          <h4 style={{ color: 'var(--text-main)', marginBottom: '16px' }}>AI Styles</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+            <div 
+              className={`style-card glass-panel ${videoType === 'speech' ? 'active' : ''}`} 
+              onClick={() => setVideoType('speech')}
+            >
+              <img src="/Assets/Podcast_mic.png" alt="Podcast" />
+              <div className="style-card-title">Podcast</div>
+              <div className="style-card-desc">Ideal for conversations</div>
             </div>
-            <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'center' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('center')}>
-              <img src="/Assets/Center focus.png" alt="Center" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
-              <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Center Focus</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>Keeps speaker centered</span>
+
+            <div 
+              className={`style-card glass-panel ${videoType === 'center' ? 'active' : ''}`} 
+              onClick={() => setVideoType('center')}
+            >
+              <img src="/Assets/Center focus.png" alt="Center" />
+              <div className="style-card-title">Center Focus</div>
+              <div className="style-card-desc">Keeps speaker centered</div>
             </div>
-            <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'visual' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('visual')}>
-              <img src="/Assets/Gaming_controller.png" alt="Gaming" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
-              <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Gaming</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>Highlights action scenes</span>
+
+            <div 
+              className={`style-card glass-panel ${videoType === 'visual' ? 'active' : ''}`} 
+              onClick={() => setVideoType('visual')}
+            >
+              <img src="/Assets/Gaming_controller.png" alt="Gaming" />
+              <div className="style-card-title">Gaming</div>
+              <div className="style-card-desc">Highlights action scenes</div>
             </div>
-            <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'vlog' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('vlog')}>
-              <img src="/Assets/Vlog_logo.png" alt="Vlog" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
-              <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Vlog</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>Dynamic camera angles</span>
+
+            <div 
+              className={`style-card glass-panel ${videoType === 'vlog' ? 'active' : ''}`} 
+              onClick={() => setVideoType('vlog')}
+            >
+              <img src="/Assets/Vlog_logo.png" alt="Vlog" />
+              <div className="style-card-title">Vlog</div>
+              <div className="style-card-desc">Dynamic camera angles</div>
             </div>
-            <div className="nav-item" style={{ width: '200px', padding: '24px', background: videoType === 'visual_split' ? 'rgba(255,255,255,0.8)' : 'transparent' }} onClick={() => setVideoType('visual_split')}>
-              <img src="/Assets/ChatGPT Image Aug 1, 2026, 01_39_02 PM.png" alt="Split Screen" style={{ width: '150px', height: '150px', objectFit: 'contain' }} />
-              <span style={{ fontSize: '1.1rem', marginTop: '12px', fontWeight: 800 }}>Faszy (Split)</span>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', textAlign: 'center' }}>Split screen gameplay</span>
+
+            <div 
+              className={`style-card glass-panel ${videoType === 'visual_split' ? 'active' : ''}`} 
+              onClick={() => setVideoType('visual_split')}
+            >
+              <img src="/Assets/ChatGPT Image Aug 1, 2026, 01_39_02 PM.png" alt="Split Screen" />
+              <div className="style-card-title">Faszy (Split)</div>
+              <div className="style-card-desc">Split screen gameplay</div>
             </div>
           </div>
         </div>
@@ -141,9 +161,9 @@ export default function GeneratorForm({
           )}
         </div>
 
-        <button type="submit" className="btn-primary" disabled={isGenerating} style={{ width: '100%', background: 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))', color: 'white', border: 'none', boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path ></path></svg>
-          {isGenerating ? 'Processing...' : '🪄Generate Clips'}
+        <button type="submit" className="btn-primary" disabled={isGenerating} style={{ width: '100%' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          {isGenerating ? 'Processing...' : 'Generate Clips'}
         </button>
       </form>
       {genMessage && <p style={{ marginTop: '12px', fontSize: '0.85rem', color: '#475569', textAlign: 'center' }}>{genMessage}</p>}

@@ -4,6 +4,7 @@ import json
 import argparse
 from generator.visual_based.audio_energy import detect_audio_energy_spikes
 from generator.visual_based.motion_detect import detect_visual_motion_scenes
+from generator.prompts import get_visual_metadata_prompt, get_visual_metadata_system_prompt
 
 def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict = None, transcript_json: dict = None) -> list:
     """
@@ -102,27 +103,20 @@ def select_visual_clips(video_path: str, target_count: int = 3, metadata: dict =
             tags_str = ", ".join(metadata.get("tags", [])) if metadata.get("tags") else "gaming, action"
             channel_str = metadata.get("channel", "")
             
-            prompt = f"VIDEO TITLE: '{title_str}'\nTAGS: {tags_str}\nCHANNEL: {channel_str}\n\n"
-            prompt += f"I have {len(candidates)} action/gameplay highlight clips from this video.\n"
-            
-            # Feed the exact spoken transcript snippet to the LLM for better context
-            if transcript_json:
-                prompt += "Here is what was spoken during each clip's hype moment:\n"
-                for i, c in enumerate(candidates):
-                    snippet = c.get("transcript_snippet", "")
-                    prompt += f"Clip {i+1}: \"{snippet}\"\n"
-            
-            prompt += "\nGenerate a unique, highly viral YouTube Shorts Title, Description, and Hashtags string for each clip.\n"
-            prompt += "Return EXACTLY a JSON array of objects with keys: 'title', 'description', 'hashtags'.\n"
-            prompt += f"Length of array MUST be EXACTLY {len(candidates)}.\n"
-            if channel_str:
-                prompt += f"IMPORTANT: You MUST append ' Credit to {channel_str}.' to the end of your 'description' for every clip!\n"
+            prompt = get_visual_metadata_prompt(title_str, tags_str, channel_str, candidates, transcript_json)
             
             
             response = ollama.chat(
-                model="llama3.2:3b",
+                model="llama3.1:8b", # match the speech pipeline's more capable model
                 format="json",
-                messages=[{"role": "user", "content": prompt}]
+                options={
+                    "temperature": 0.4,
+                    "num_predict": 300 * len(candidates) + 200,
+                },
+                messages=[
+                    {"role": "system", "content": get_visual_metadata_system_prompt()},
+                    {"role": "user", "content": prompt}
+                ]
             )
             
             content = response["message"]["content"].strip()

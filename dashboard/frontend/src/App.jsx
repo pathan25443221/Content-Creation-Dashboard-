@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Toaster, toast } from 'sonner';
 import Sidebar from './components/Sidebar';
 import ProgressOverlay from './components/ProgressOverlay';
 import OverviewTab from './components/OverviewTab';
@@ -44,10 +46,12 @@ export default function App() {
             setProgressMsg(null);
             setIsGenerating(false);
             setGenMessage('Generation complete! Check Review tab.');
+            toast.success('Generation complete! Check Review tab.');
         } else if (msg.startsWith('Error:')) {
             setProgressMsg(null);
             setIsGenerating(false);
             setGenMessage(msg);
+            toast.error(msg);
         } else {
             setProgressMsg(msg);
             setIsGenerating(true);
@@ -99,6 +103,10 @@ export default function App() {
 
   useEffect(() => {
     fetchOverview();
+    if (activeTab === 'overview') {
+      fetchClips();
+      fetchPosts();
+    }
     if (activeTab === 'review') fetchClips('pending');
     if (activeTab === 'posts' || activeTab === 'analytics') fetchPosts();
     if (activeTab === 'clips') fetchClips();
@@ -109,7 +117,7 @@ export default function App() {
     if (!videoInput) return;
 
     setIsGenerating(true);
-    setGenMessage('🚀 Generation started in background! Downloading, transcribing with Whisper, & selecting clips via Ollama...');
+    toast.info('🚀 Generation started in background!');
 
     try {
       const res = await fetch('/api/generate', {
@@ -128,23 +136,23 @@ export default function App() {
 
       const data = await res.json();
       if (res.ok || res.status === 202) {
-        setGenMessage('⚡ Processing active in background! Clips will automatically land in the Review Queue when rendered.');
+        toast.success('⚡ Processing active in background! Check back soon.');
         setVideoInput('');
         setProgressMsg("Initializing...");
         setIsGenerating(true);
       } else {
-        setGenMessage(`Error: ${data.detail || 'Generation failed'}`);
+        toast.error(`Error: ${data.detail || 'Generation failed'}`);
         setIsGenerating(false);
       }
     } catch (err) {
-      setGenMessage(`Network Error: ${err.message}`);
+      toast.error(`Network Error: ${err.message}`);
       setIsGenerating(false);
     }
   };
 
   const handleApprove = async (clipId, customTitle, customDescription, customHashtags, platforms) => {
     if (!platforms || platforms.length === 0) {
-      alert("Please select at least one platform to publish to.");
+      toast.error("Please select at least one platform to publish to.");
       return { success: false, message: "No platform selected." };
     }
     try {
@@ -199,6 +207,8 @@ export default function App() {
 
   return (
     <div className="app-container">
+      <Toaster position="bottom-right" richColors />
+
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
@@ -208,29 +218,39 @@ export default function App() {
       <ProgressOverlay progressMsg={progressMsg} />
 
       <main className="main-content">
-        {activeTab === 'overview' && (
-          <OverviewTab overview={overview} generatorProps={generatorProps} />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={activeTab}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+          >
+            {activeTab === 'overview' && (
+              <OverviewTab overview={overview} generatorProps={generatorProps} clips={clips} posts={posts} />
+            )}
 
-        {activeTab === 'generate' && (
-          <GenerateTab generatorProps={generatorProps} />
-        )}
+            {activeTab === 'generate' && (
+              <GenerateTab generatorProps={generatorProps} />
+            )}
 
-        {activeTab === 'review' && (
-          <ReviewQueueTab 
-            clips={clips} 
-            handleApprove={handleApprove} 
-            handleReject={handleReject} 
-          />
-        )}
+            {activeTab === 'review' && (
+              <ReviewQueueTab 
+                clips={clips} 
+                handleApprove={handleApprove} 
+                handleReject={handleReject} 
+              />
+            )}
 
-        {activeTab === 'posts' && (
-          <PostsLibraryTab posts={posts} />
-        )}
+            {activeTab === 'posts' && (
+              <PostsLibraryTab posts={posts} />
+            )}
 
-        {activeTab === 'analytics' && (
-          <AnalyticsTab overview={overview} fetchOverview={fetchOverview} posts={posts} fetchPosts={fetchPosts} />
-        )}
+            {activeTab === 'analytics' && (
+              <AnalyticsTab overview={overview} fetchOverview={fetchOverview} posts={posts} fetchPosts={fetchPosts} />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
     </div>
   );
